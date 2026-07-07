@@ -4,6 +4,10 @@ import { MAYA_TOOLS, executeTool } from '@/lib/tools';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { validateBody, ChatRequestSchema } from '@/lib/api-validation';
+import { redactToolArgs } from '@/lib/pii-redact';
+
+const SESSION_COOKIE_NAME = 'chat_session_id';
+const SESSION_ID_REGEX = /^[a-zA-Z0-9_-]{1,100}$/;
 
 /**
  * AI CLIENT SETUP:
@@ -53,13 +57,25 @@ async function logEvent(sessionId, type, payload, requestId) {
 export async function POST(req) {
     const requestId = crypto.randomUUID();
 
-    // SESSION ID VALIDATION: The session ID comes from a client-provided header.
-    // A malicious client could supply any session ID to read or overwrite another
-    // customer's booking data. We validate format and length to prevent abuse.
-    const rawSessionId = req.headers.get('x-session-id') || 'anonymous';
-    const sessionId = rawSessionId === 'anonymous'
-        ? 'anonymous'
-        : rawSessionId.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 100);
+    // SESSION ID: Server-generated to prevent spoofing. A malicious client
+    // previously could read another customer's data by guessing their session ID.
+    // Now: (1) read from cookie, (2) if absent, generate one and set cookie,
+    // (3) validate format to prevent injection.
+    const cookieSessionId = req.cookies.get(SESSION_COOKIE_NAME)?.value;
+    const headerSessionId = req.headers.get('x-session-id');
+    const rawSessionId = cookieSessionId || headerSessionId || 'anonymous';
+
+    let sessionId;
+    let isNewSession = false;
+
+    if (rawSessionId === 'anonymous' || !rawSessionId) {
+        // First visit — generate server-side session ID
+        sessionId = crypto.randomUUID().replace(/-/g, '').slice(0, 32);
+        isNewSession = true;
+    } else {
+        // Validate format — reject tampered IDs
+        sessionId = SESSION_ID_REGEX.test(rawSessionId) ? rawSessionId : 'anonymous';
+    }
 
     // RATE LIMITING: Reject requests exceeding 20 per minute per session.
     const rateLimit = checkRateLimit(sessionId);
@@ -154,10 +170,27 @@ export async function POST(req) {
                 }
 
                 await logEvent(sessionId, 'chat_message', { content: assistantMessage.content }, requestId);
-                return Response.json({
+
+                const responseData = {
                     role: 'assistant',
                     content: assistantMessage.content,
-                    bookingData
+                    bookingData,
+                    session_id: sessionId,
+                };
+
+                // Set session cookie on first response so client can read it
+                const isProduction = process.env.NODE_ENV === 'production';
+                const cookieParts = [
+                    `${SESSION_COOKIE_NAME}=${sessionId}`,
+                    'Path=/',
+                    'HttpOnly',
+                    'SameSite=Lax',
+                    'Max-Age=2592000', // 30 days
+                ];
+                if (isProduction) cookieParts.push('Secure');
+
+                return Response.json(responseData, {
+                    headers: { 'Set-Cookie': cookieParts.join('; ') },
                 });
             }
 
@@ -173,10 +206,11 @@ export async function POST(req) {
                     if (name === 'sync_booking_state') {
                         bookingData = { ...bookingData, ...args };
                     }
-                    await logEvent(sessionId, 'tool_call', { tool: name, args, result }, requestId);
+                    // PII REDACTION: Strip customer names, phones, addresses from logs
+                    await logEvent(sessionId, 'tool_call', { tool: name, args: redactToolArgs(args), result }, requestId);
                 } catch (e) {
                     console.error(`[${requestId}] Tool Error [${name}]:`, e.message);
-                    result = JSON.stringify({ error: "Failed to process tool request", details: e.message });
+                    result = JSON.stringify({ error: "Failed to process tool request" });
                 }
 
                 apiMessages.push({

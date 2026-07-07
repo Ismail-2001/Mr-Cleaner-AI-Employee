@@ -8,22 +8,15 @@ import ErrorBoundary from './ErrorBoundary';
 import { supabase } from '@/lib/supabase';
 
 /**
- * BOOKING DATA PERSISTENCE FIX:
- * Previously, bookingData lived only in React state and was lost on page refresh,
- * forcing Maya to restart booking collection from scratch without telling the user
- * why. Now we:
- * 1. Use a stable session ID persisted in localStorage (not random per mount)
- * 2. Load bookingData + message history from Supabase on mount
- * 3. The server-side chat route already saves bookingData to chat_sessions on
- *    every response — we just need to read it back on load
+ * SESSION ID MANAGEMENT:
+ * Previously, the session ID was generated client-side in localStorage. A malicious
+ * user could read another customer's booking data by setting their session ID header.
+ * Now the server generates the session ID and returns it in the chat response.
+ * The client stores it and sends it on subsequent requests.
  */
-function getSessionId() {
-    if (typeof window === 'undefined') return 'sess_' + Math.random().toString(36).substr(2, 9);
-    const stored = localStorage.getItem('maya_session_id');
-    if (stored) return stored;
-    const newId = 'sess_' + window.crypto.randomUUID();
-    localStorage.setItem('maya_session_id', newId);
-    return newId;
+function getStoredSessionId() {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem('maya_session_id');
 }
 
 export default function ChatInterface({ onClose, initialMessage }) {
@@ -35,15 +28,15 @@ export default function ChatInterface({ onClose, initialMessage }) {
     const [bookingData, setBookingData] = useState(null);
     const [showSummary, setShowSummary] = useState(false);
     // SSR HYDRATION FIX: Initialize sessionId as null, then set it in useEffect.
-    // This prevents mismatch between server (random ID) and client (localStorage ID).
+    // Server generates the ID — we read it from localStorage on subsequent visits.
     const [sessionId, setSessionId] = useState(null);
     const [isLoadingSession, setIsLoadingSession] = useState(true);
     const messagesEndRef = useRef(null);
     const messagesRef = useRef(messages);
 
-    // Set session ID on client side only (avoids SSR hydration mismatch)
+    // Read server-generated session ID from localStorage (set after first response)
     useEffect(() => {
-        setSessionId(getSessionId());
+        setSessionId(getStoredSessionId());
     }, []);
 
     const scrollToBottom = () => {
@@ -132,12 +125,12 @@ export default function ChatInterface({ onClose, initialMessage }) {
         setIsTyping(true);
 
         try {
+            const headers = { 'Content-Type': 'application/json' };
+            if (sessionId) headers['x-session-id'] = sessionId;
+
             const response = await fetch('/api/chat', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-session-id': sessionId
-                },
+                headers,
                 body: JSON.stringify({
                     messages: updatedMessages.map(m => ({
                         role: m.role,
@@ -153,6 +146,13 @@ export default function ChatInterface({ onClose, initialMessage }) {
 
             const data = await response.json();
             setIsTyping(false);
+
+            // SERVER-GENERATED SESSION ID: Store the ID from the Set-Cookie header
+            // or response body so subsequent requests are authenticated.
+            if (data.session_id && !sessionId) {
+                setSessionId(data.session_id);
+                localStorage.setItem('maya_session_id', data.session_id);
+            }
 
             if (data.content) {
                 setMessages(prev => [...prev, { role: 'assistant', content: data.content }]);

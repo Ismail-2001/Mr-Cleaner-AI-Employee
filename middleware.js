@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
 import { getSecret, COOKIE_NAME } from '@/lib/session';
+import { isSessionRevoked } from '@/lib/revocation';
 
 /**
  * WHY THIS MIDDLEWARE EXISTS:
@@ -17,6 +18,9 @@ import { getSecret, COOKIE_NAME } from '@/lib/session';
  * → /dashboard/login → ...).
  *
  * BUG FIX: JWT exp is now correctly in seconds (via session.js), not ms.
+ *
+ * SECURITY: Revoked sessions are checked against Supabase so logout actually
+ * invalidates the JWT before its natural 8-hour expiry.
  */
 async function verifySessionCookie(request) {
     const cookie = request.cookies.get(COOKIE_NAME);
@@ -26,7 +30,13 @@ async function verifySessionCookie(request) {
         const { payload } = await jwtVerify(cookie.value, getSecret());
         // exp is in seconds (set by session.js). jose validates exp internally,
         // but we check again as defense-in-depth.
-        return !!payload?.sid;
+        if (!payload?.sid) return false;
+
+        // Check if this session was revoked (e.g., on logout)
+        const revoked = await isSessionRevoked(payload.sid);
+        if (revoked) return false;
+
+        return true;
     } catch {
         return false;
     }

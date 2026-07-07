@@ -5,6 +5,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { checkAvailability } from '@/lib/calendar';
 import { validateBody, BookingRequestSchema } from '@/lib/api-validation';
 import { checkBookingRateLimit } from '@/lib/rate-limit';
+import { redactBookingData } from '@/lib/pii-redact';
 
 /**
  * WHY THIS RE-VERIFICATION EXISTS:
@@ -126,7 +127,8 @@ export async function POST(req) {
             return validation.response;
         }
         const bookingData = validation.data;
-        console.log(`[${requestId}] Creating booking:`, bookingData);
+        // PII REDACTION: Never log raw customer data
+        console.log(`[${requestId}] Creating booking:`, redactBookingData(bookingData));
 
         // RACE CONDITION FIX: Re-verify slot availability immediately before insert.
         if (bookingData.booking_date && bookingData.booking_time) {
