@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
-import { secret, COOKIE_NAME } from '@/lib/session';
+import { getSecret, COOKIE_NAME } from '@/lib/session';
 
 /**
  * WHY THIS MIDDLEWARE EXISTS:
@@ -23,7 +23,7 @@ async function verifySessionCookie(request) {
     if (!cookie?.value) return false;
 
     try {
-        const { payload } = await jwtVerify(cookie.value, secret);
+        const { payload } = await jwtVerify(cookie.value, getSecret());
         // exp is in seconds (set by session.js). jose validates exp internally,
         // but we check again as defense-in-depth.
         return !!payload?.sid;
