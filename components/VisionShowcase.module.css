@@ -1,0 +1,228 @@
+.section {
+    padding: 140px 0;
+    background: var(--obsidian);
+    overflow: hidden;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 80px;
+    align-items: center;
+}
+
+.badge {
+    color: var(--gold);
+    text-transform: uppercase;
+    font-weight: 800;
+    font-size: 0.85rem;
+    letter-spacing: 2px;
+    margin-bottom: 24px;
+    display: inline-block;
+}
+
+.title {
+    font-size: clamp(2rem, 4vw, 3rem);
+    color: var(--white);
+    line-height: 1.1;
+    margin-bottom: 32px;
+}
+
+.description {
+    color: #888;
+    font-size: 1.15rem;
+    line-height: 1.7;
+    margin-bottom: 48px;
+    max-width: 500px;
+}
+
+.description b,
+.description strong {
+    color: var(--platinum);
+}
+
+.featureList {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+}
+
+.featureRow {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+}
+
+.iconBox {
+    min-width: 44px;
+    height: 44px;
+    background: rgba(212, 175, 55, 0.1);
+    color: var(--gold);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(212, 175, 55, 0.2);
+}
+
+.featureRow h4 {
+    color: var(--white);
+    font-size: 1.1rem;
+    margin-bottom: 4px;
+}
+
+.featureRow p {
+    color: #666;
+    font-size: 0.95rem;
+}
+
+/* Visual Container */
+.visualContainer {
+    position: relative;
+    padding: 20px;
+}
+
+.glassFrame {
+    position: relative;
+    border-radius: 32px;
+    overflow: hidden;
+    background: var(--coal);
+    border: 1px solid var(--glass-border);
+    aspect-ratio: 4/5;
+    box-shadow: 0 40px 100px rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.mockImg {
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, #1a1a1a 0%, #050505 100%);
+    position: relative;
+}
+
+/* AI HUD Effects */
+.aiOverlay {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    border: 2px solid rgba(212, 175, 55, 0.2);
+    margin: 40px;
+    border-radius: 20px;
+    pointer-events: none;
+}
+
+.scanLine {
+    position: absolute;
+    top: -10%;
+    left: 0;
+    width: 100%;
+    height: 100px;
+    background: linear-gradient(to bottom, transparent, var(--gold-glow), transparent);
+    animation: scan 4s linear infinite;
+    opacity: 0.5;
+}
+
+@keyframes scan {
+    0% {
+        top: -20%;
+    }
+
+    100% {
+        top: 120%;
+    }
+}
+
+.point1,
+.point2,
+.point3 {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.point1 {
+    top: 20%;
+    left: 10%;
+}
+
+.point2 {
+    top: 45%;
+    right: 10%;
+}
+
+.point3 {
+    bottom: 20%;
+    left: 30%;
+}
+
+.point1::before,
+.point2::before,
+.point3::before {
+    content: '';
+    width: 10px;
+    height: 10px;
+    background: var(--gold);
+    border-radius: 50%;
+    box-shadow: 0 0 15px var(--gold);
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+        opacity: 1;
+    }
+
+    50% {
+        transform: scale(1.5);
+        opacity: 0.5;
+    }
+
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.point1 span,
+.point2 span,
+.point3 span {
+    background: rgba(10, 10, 11, 0.8);
+    backdrop-filter: blur(5px);
+    padding: 4px 12px;
+    border-radius: 6px;
+    font-size: 0.7rem;
+    color: var(--gold);
+    border: 1px solid var(--glass-border);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: 700;
+}
+
+.glowEffect {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 120%;
+    height: 120%;
+    background: radial-gradient(circle, var(--gold-glow) 0%, transparent 70%);
+    z-index: -1;
+    opacity: 0.3;
+}
+
+@media (max-width: 1024px) {
+    .grid {
+        grid-template-columns: 1fr;
+        gap: 60px;
+    }
+
+    .visualContainer {
+        order: -1;
+        max-width: 600px;
+        margin: 0 auto;
+    }
+}

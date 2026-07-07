@@ -1,0 +1,122 @@
+.container {
+    overflow-x: auto;
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 32px;
+}
+
+.header h2 {
+    font-size: 1.5rem;
+    color: var(--white);
+    letter-spacing: -0.5px;
+}
+
+.filters {
+    display: flex;
+    gap: 12px;
+}
+
+.filterSelect {
+    padding: 10px 16px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    font-size: 0.9rem;
+    color: var(--white);
+    cursor: pointer;
+}
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.table th {
+    text-align: left;
+    padding: 16px 20px;
+    color: #555;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: 800;
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.table td {
+    padding: 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.table tr:last-child td {
+    border-bottom: none;
+}
+
+.customerInfo {
+    display: flex;
+    flex-direction: column;
+}
+
+.customerInfo strong {
+    color: var(--white);
+    font-size: 1rem;
+}
+
+.customerInfo span {
+    font-size: 0.85rem;
+    color: #666;
+}
+
+.badge {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--platinum);
+    padding: 6px 12px;
+    border-radius: 100px;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    font-weight: 700;
+    border: 1px solid var(--glass-border);
+}
+
+.dateTime .date {
+    color: var(--white);
+    font-weight: 600;
+}
+
+.dateTime .time {
+    font-size: 0.85rem;
+    color: #666;
+}
+
+.statusRow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.statusDot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.price {
+    font-weight: 800;
+    color: var(--gold);
+    font-size: 1.1rem;
+}
+
+.actionBtn {
+    background: transparent;
+    color: #444;
+    transition: color 0.2s ease;
+}
+
+.actionBtn:hover {
+    color: var(--gold);
+}

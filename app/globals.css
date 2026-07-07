@@ -1,0 +1,150 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Inter:wght@300;400;500;600&display=swap');
+
+:root {
+  /* Premium Matte/Glossy Palette (Automotive Inspired) */
+  --obsidian: #0A0A0B;
+  --coal: #1C1C1E;
+  --platinum: #E1E1E1;
+  --gold: #D4AF37;
+  --gold-glow: rgba(212, 175, 55, 0.4);
+  --glass-bg: rgba(255, 255, 255, 0.05);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --white: #FFFFFF;
+  --success: #30D158;
+
+  /* Layout & Glass */
+  --max-width: 1400px;
+  --border-radius-lg: 24px;
+  --border-radius-md: 12px;
+  --shadow-premium: 0 20px 50px rgba(0, 0, 0, 0.5);
+  --blur-amount: 20px;
+
+  /* Fonts - Modern Sans */
+  --font-heading: 'Outfit', sans-serif;
+  --font-body: 'Inter', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+  background-color: var(--obsidian);
+  color: var(--platinum);
+  font-family: var(--font-body);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--white);
+}
+
+/* Luxury Glassmorphism */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--blur-amount));
+  -webkit-backdrop-filter: blur(var(--blur-amount));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--border-radius-lg);
+}
+
+.glass-card {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0) 100%);
+  backdrop-filter: blur(var(--blur-amount));
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-premium);
+}
+
+/* Aztec Pattern Utility */
+.aztec-border {
+  position: relative;
+}
+
+.aztec-border::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background-image: linear-gradient(45deg, var(--clay) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--clay) 25%, transparent 25%);
+  background-size: 8px 8px;
+  opacity: 0.3;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(194, 83, 46, 0.4);
+  }
+
+  70% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 10px rgba(194, 83, 46, 0);
+  }
+
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(194, 83, 46, 0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.8s ease-out forwards;
+}
+
+/* Layout Classes */
+.container {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+.section-padding {
+  padding: 80px 0;
+}
+
+/* Form Styles */
+input,
+textarea,
+select {
+  font-family: var(--font-body);
+  border: 1px solid #ddd;
+  padding: 12px;
+  border-radius: 8px;
+  width: 100%;
+}
+
+input:focus,
+textarea:focus {
+  border-color: var(--terracotta);
+  outline: none;
+}

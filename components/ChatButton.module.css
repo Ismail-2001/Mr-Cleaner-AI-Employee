@@ -1,0 +1,49 @@
+.button {
+    position: fixed;
+    bottom: 40px;
+    right: 40px;
+    width: 70px;
+    height: 70px;
+    background: var(--terracotta);
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: var(--shadow-lg);
+    z-index: 1000;
+    animation: pulse 2s infinite;
+}
+
+.button:hover {
+    transform: scale(1.1);
+    background: var(--terracotta-dark);
+}
+
+.tooltip {
+    position: absolute;
+    right: 85px;
+    background: var(--obsidian);
+    color: white;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+.button:hover .tooltip {
+    opacity: 1;
+}
+
+@media (max-width: 768px) {
+    .button {
+        bottom: 20px;
+        right: 20px;
+        width: 60px;
+        height: 60px;
+    }
+}

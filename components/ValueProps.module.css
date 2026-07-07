@@ -1,0 +1,42 @@
+.section {
+    padding: 100px 0;
+    background: linear-gradient(to bottom, var(--obsidian), var(--coal));
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 40px;
+}
+
+.card {
+    background: rgba(255, 255, 255, 0.02);
+    padding: 40px;
+    border-radius: 24px;
+    border: 1px solid var(--glass-border);
+    transition: all 0.3s ease;
+}
+
+.card:hover {
+    background: rgba(255, 255, 255, 0.04);
+    transform: translateY(-5px);
+    border-color: rgba(212, 175, 55, 0.3);
+}
+
+.icon {
+    color: var(--gold);
+    margin-bottom: 24px;
+}
+
+.card h3 {
+    color: var(--white);
+    font-size: 1.4rem;
+    margin-bottom: 16px;
+    letter-spacing: -0.5px;
+}
+
+.card p {
+    color: #777;
+    line-height: 1.6;
+    font-size: 1rem;
+}

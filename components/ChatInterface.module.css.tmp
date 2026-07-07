@@ -1,0 +1,24 @@
+@media (max-width: 500px) {
+    .container {
+        height: 100%;
+        border-radius: 0;
+    }
+}
+
+.inputArea input:disabled {
+    background: rgba(0,0,0,0.02);
+    cursor: not-allowed;
+}
+
+.spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-radius: 50%;
+    border-top-color: white;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}

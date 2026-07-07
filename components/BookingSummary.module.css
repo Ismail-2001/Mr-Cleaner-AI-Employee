@@ -1,0 +1,220 @@
+.card {
+    background: linear-gradient(135deg, rgba(28, 28, 30, 0.95) 0%, rgba(10, 10, 11, 0.98) 100%);
+    backdrop-filter: blur(20px);
+    border-radius: 24px;
+    border: 1px solid var(--glass-border);
+    padding: 32px;
+    margin: 20px 0;
+    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.6);
+    animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 4px;
+    background: linear-gradient(90deg, transparent, var(--gold), transparent);
+}
+
+@keyframes slideUp {
+    from {
+        transform: translateY(30px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.header {
+    margin-bottom: 24px;
+    text-align: center;
+}
+
+.status {
+    font-size: 0.7rem;
+    color: var(--gold);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    font-weight: 800;
+    margin-bottom: 12px;
+    display: inline-block;
+    padding: 4px 12px;
+    background: rgba(212, 175, 55, 0.1);
+    border-radius: 100px;
+}
+
+.header h3 {
+    font-family: 'Outfit', sans-serif;
+    font-size: 1.5rem;
+    color: var(--white);
+    margin: 0;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+}
+
+.details {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 32px;
+    padding: 24px;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.item {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+}
+
+.item svg {
+    color: var(--gold);
+    opacity: 0.8;
+}
+
+.item span {
+    font-size: 0.65rem;
+    color: #666;
+    display: block;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: 700;
+}
+
+.item p {
+    font-size: 0.9rem;
+    color: var(--platinum);
+    margin: 2px 0 0 0;
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+.priceSec {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    background: linear-gradient(90deg, rgba(212, 175, 55, 0.05) 0%, transparent 100%);
+    border-radius: 16px;
+    margin-bottom: 32px;
+    border: 1px solid rgba(212, 175, 55, 0.1);
+}
+
+.priceSec span {
+    font-size: 0.85rem;
+    color: #aaa;
+    font-weight: 500;
+}
+
+.priceSec p {
+    font-family: 'Outfit', sans-serif;
+    font-size: 1.75rem;
+    color: var(--gold);
+    font-weight: 800;
+    margin: 0;
+    text-shadow: 0 0 20px var(--gold-glow);
+}
+
+.actions {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.confirmBtn {
+    width: 100%;
+    padding: 20px;
+    background: var(--gold);
+    color: var(--obsidian);
+    border-radius: 14px;
+    font-weight: 800;
+    font-size: 1.1rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    border: none;
+    box-shadow: 0 10px 25px var(--gold-glow);
+}
+
+.confirmBtn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 15px 35px var(--gold-glow);
+}
+
+.confirmBtn:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.confirmBtn:disabled {
+    background: #2c2c2e;
+    color: #555;
+    box-shadow: none;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.secondaryActions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.cancelBtn {
+    width: 100%;
+    padding: 14px;
+    background: rgba(255, 255, 255, 0.03);
+    color: #666;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    transition: all 0.3s ease;
+    border: 1px solid var(--glass-border);
+    cursor: pointer;
+}
+
+.cancelBtn:hover {
+    color: var(--white);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.waBtn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    padding: 14px;
+    background: rgba(37, 211, 102, 0.1);
+    color: #25D366;
+    border-radius: 12px;
+    font-weight: 700;
+    font-size: 0.9rem;
+    text-decoration: none;
+    transition: all 0.3s ease;
+    border: 1px solid rgba(37, 211, 102, 0.2);
+    text-align: center;
+}
+
+.waBtn:hover {
+    background: rgba(37, 211, 102, 0.2);
+    transform: translateY(-2px);
+}
+
+.note {
+    font-size: 0.7rem;
+    color: #444;
+    text-align: center;
+    margin-top: 24px;
+    line-height: 1.5;
+    font-style: italic;
+}

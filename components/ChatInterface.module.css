@@ -1,0 +1,221 @@
+.overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(10px);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.container {
+    width: 100%;
+    max-width: 550px;
+    height: 700px;
+    background: var(--coal);
+    border-radius: var(--border-radius-lg);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: var(--shadow-premium);
+    border: 1px solid var(--glass-border);
+}
+
+.header {
+    padding: 24px;
+    background: linear-gradient(to right, var(--coal), var(--obsidian));
+    color: var(--white);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.botProfile {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.avatar {
+    width: 48px;
+    height: 48px;
+    background: linear-gradient(135deg, var(--gold) 0%, #B8860B 100%);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--obsidian);
+    box-shadow: 0 0 15px rgba(212, 175, 55, 0.3);
+}
+
+.botProfile h3 {
+    font-size: 1.2rem;
+    font-weight: 700;
+    margin: 0;
+}
+
+.botProfile span {
+    font-size: 0.8rem;
+    opacity: 0.6;
+    letter-spacing: 0.5px;
+}
+
+.closeBtn {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--white);
+    padding: 8px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.closeBtn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: rotate(90deg);
+}
+
+.messageList {
+    flex-grow: 1;
+    padding: 24px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    background: radial-gradient(circle at top right, rgba(212, 175, 55, 0.05), transparent);
+}
+
+.messageBubble {
+    max-width: 85%;
+    padding: 14px 20px;
+    border-radius: 20px;
+    font-size: 1rem;
+    line-height: 1.5;
+}
+
+.userRow {
+    justify-content: flex-end;
+}
+
+.userRow .messageBubble {
+    background: var(--gold);
+    color: var(--obsidian);
+    font-weight: 600;
+    border-bottom-right-radius: 4px;
+    box-shadow: 0 4px 15px rgba(212, 175, 55, 0.2);
+}
+
+.botRow {
+    justify-content: flex-start;
+}
+
+.botRow .messageBubble {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--platinum);
+    border-bottom-left-radius: 4px;
+    border: 1px solid var(--glass-border);
+}
+
+.inputArea {
+    padding: 20px 24px;
+    background: var(--obsidian);
+    border-top: 1px solid var(--glass-border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.inputArea input[type="text"] {
+    flex-grow: 1;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--glass-border);
+    border-radius: 14px;
+    padding: 12px 20px;
+    color: var(--white);
+    font-size: 0.95rem;
+}
+
+.inputArea input[type="text"]:focus {
+    border-color: var(--gold);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.sendBtn {
+    width: 48px;
+    height: 48px;
+    background: var(--gold);
+    color: var(--obsidian);
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 15px var(--gold-glow);
+}
+
+.sendBtn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px var(--gold-glow);
+}
+
+.sendBtn:disabled {
+    background: #333;
+    color: #666;
+    box-shadow: none;
+    cursor: not-allowed;
+}
+
+.typing {
+    display: flex;
+    align-items: center;
+}
+
+.typing span {
+    height: 8px;
+    width: 8px;
+    background: var(--gold);
+    display: inline-block;
+    border-radius: 50%;
+    margin: 0 3px;
+    animation: typing 1s infinite alternate;
+}
+
+@keyframes typing {
+    from {
+        transform: translateY(0);
+        opacity: 0.3;
+    }
+
+    to {
+        transform: translateY(-6px);
+        opacity: 1;
+    }
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid rgba(0, 0, 0, 0.1);
+    border-radius: 50%;
+    border-top-color: var(--obsidian);
+    animation: spin 0.8s linear infinite;
+}
+
+@media (max-width: 600px) {
+    .container {
+        height: 100%;
+        border-radius: 0;
+        max-width: none;
+    }
+}
