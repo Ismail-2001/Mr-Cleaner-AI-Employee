@@ -1,5 +1,5 @@
 import { OpenAI } from 'openai';
-import { MAYA_SYSTEM_PROMPT } from '@/lib/ai-agent';
+import { generateMayaPrompt } from '@/lib/ai-agent';
 import { MAYA_TOOLS, executeTool } from '@/lib/tools';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { checkRateLimit } from '@/lib/rate-limit';
@@ -115,10 +115,34 @@ export async function POST(req) {
             day: 'numeric'
         });
 
+        // Load business config from Supabase for dynamic prompt templating.
+        // Falls back to env vars if business_knowledge table doesn't exist yet.
+        let businessConfig = {};
+        if (supabaseAdmin) {
+            try {
+                const { data: kbData } = await supabaseAdmin
+                    .from('business_knowledge')
+                    .select('id, content')
+                    .in('id', ['pricing', 'service_area', 'policies']);
+
+                if (kbData && kbData.length > 0) {
+                    const kbMap = Object.fromEntries(kbData.map(k => [k.id, k.content]));
+                    if (kbMap.service_area) {
+                        businessConfig.service_area_zips = kbMap.service_area.zip_codes || [];
+                        businessConfig.business_location = kbMap.service_area.counties?.join(', ') || '';
+                    }
+                }
+            } catch {
+                // business_knowledge table may not exist yet — use env defaults
+            }
+        }
+
+        const systemPrompt = generateMayaPrompt(businessConfig);
+
         const apiMessages = [
             {
                 role: "system",
-                content: `${MAYA_SYSTEM_PROMPT}\n\n# CONTEXT\nToday is ${currentDate}. Use this to calculate relative dates like 'tomorrow' or 'next week'.`
+                content: `${systemPrompt}\n\n# CONTEXT\nToday is ${currentDate}. Use this to calculate relative dates like 'tomorrow' or 'next week'.`
             },
             ...currentMessages
         ];

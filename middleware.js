@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
 import { getSecret, COOKIE_NAME } from '@/lib/session';
 import { isSessionRevoked } from '@/lib/revocation';
+import { validateCsrf } from '@/lib/csrf';
 
 /**
  * WHY THIS MIDDLEWARE EXISTS:
@@ -21,6 +22,8 @@ import { isSessionRevoked } from '@/lib/revocation';
  *
  * SECURITY: Revoked sessions are checked against Supabase so logout actually
  * invalidates the JWT before its natural 8-hour expiry.
+ *
+ * CSRF: Origin/Referer header checks on state-changing requests.
  */
 async function verifySessionCookie(request) {
     const cookie = request.cookies.get(COOKIE_NAME);
@@ -28,14 +31,9 @@ async function verifySessionCookie(request) {
 
     try {
         const { payload } = await jwtVerify(cookie.value, getSecret());
-        // exp is in seconds (set by session.js). jose validates exp internally,
-        // but we check again as defense-in-depth.
         if (!payload?.sid) return false;
-
-        // Check if this session was revoked (e.g., on logout)
         const revoked = await isSessionRevoked(payload.sid);
         if (revoked) return false;
-
         return true;
     } catch {
         return false;
@@ -44,6 +42,10 @@ async function verifySessionCookie(request) {
 
 export async function middleware(request) {
     const { pathname } = request.nextUrl;
+
+    // CSRF protection on state-changing requests (POST/PUT/DELETE)
+    const csrfResult = validateCsrf(request);
+    if (csrfResult) return csrfResult;
 
     // Protect dashboard pages — but NEVER redirect /dashboard/login to itself
     if (pathname.startsWith('/dashboard') && pathname !== '/dashboard/login') {
@@ -54,7 +56,6 @@ export async function middleware(request) {
     }
 
     // Protect dashboard data API — only allow GET /api/bookings with valid session
-    // (POST /api/bookings is customer-facing and must remain open for chat flow)
     if (pathname === '/api/bookings' && request.method === 'GET') {
         const valid = await verifySessionCookie(request);
         if (!valid) {
@@ -69,5 +70,7 @@ export const config = {
     matcher: [
         '/dashboard/:path*',
         '/api/bookings',
+        '/api/chat',
+        '/api/dashboard/:path*',
     ],
 };
