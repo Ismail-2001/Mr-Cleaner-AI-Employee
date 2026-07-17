@@ -5,6 +5,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { validateBody, ChatRequestSchema } from '@/lib/api-validation';
 import { redactToolArgs } from '@/lib/pii-redact';
+import { withTimeout, DEFAULT_TIMEOUT_MS } from '@/lib/timeout';
 
 const SESSION_COOKIE_NAME = 'chat_session_id';
 const SESSION_ID_REGEX = /^[a-zA-Z0-9_-]{1,100}$/;
@@ -172,12 +173,16 @@ export async function POST(req) {
 
             console.log(`[${requestId}] Using model: ${model} (iteration ${iteration + 1})`);
 
-            const response = await client.chat.completions.create({
-                model: model,
-                messages: apiMessages,
-                tools: MAYA_TOOLS,
-                tool_choice: 'auto',
-            });
+            const response = await withTimeout(
+                client.chat.completions.create({
+                    model: model,
+                    messages: apiMessages,
+                    tools: MAYA_TOOLS,
+                    tool_choice: 'auto',
+                }),
+                DEFAULT_TIMEOUT_MS,
+                `AI ${model}`
+            );
 
             const assistantMessage = response.choices[0].message;
             apiMessages.push(assistantMessage);
@@ -247,10 +252,30 @@ export async function POST(req) {
             iteration++;
         }
 
-        throw new Error("Maximum agent iterations exceeded");
+        // MAX ITERATIONS SAFEGUARD: If Maya hits the loop cap without producing
+        // a final response, return a graceful fallback instead of crashing.
+        console.error(JSON.stringify({
+            code: 'MAX_ITERATIONS_EXCEEDED',
+            sessionId,
+            requestId,
+            iterationCount: maxIterations,
+            timestamp: new Date().toISOString()
+        }));
+
+        return Response.json({
+            role: 'assistant',
+            content: "This conversation is taking longer than expected. Let me have our team follow up with you directly to make sure everything is perfect.",
+            bookingData,
+            error: { code: 'MAX_ITERATIONS_EXCEEDED', request_id: requestId }
+        });
 
     } catch (error) {
-        console.error(`[${requestId}] Critical Orchestrator Error:`, error.message);
+        console.error(`[${requestId}] Critical Orchestrator Error:`, JSON.stringify({
+            error: error.message,
+            sessionId,
+            requestId,
+            timestamp: new Date().toISOString()
+        }));
         return Response.json({
             role: 'assistant',
             content: "I'm having a little trouble orchestrating my tools. Please try again or reach out to us directly!",
