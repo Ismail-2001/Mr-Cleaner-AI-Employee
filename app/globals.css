@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@400;500;600;700;800;900&family=Manrope:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
 :root {
   --obsidian: #0A0A0B;
@@ -16,8 +16,9 @@
   --border-radius-md: 12px;
   --shadow-premium: 0 20px 50px rgba(0, 0, 0, 0.5);
   --blur-amount: 20px;
-  --font-heading: 'Bebas Neue', sans-serif;
-  --font-body: 'Plus Jakarta Sans', sans-serif;
+  --font-heading: 'Big Shoulders Display', sans-serif;
+  --font-body: 'Manrope', sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
 }
 
 * {
@@ -42,7 +43,7 @@ html, body {
 
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-heading);
-  font-weight: 400;
+  font-weight: 700;
   line-height: 1.1;
   color: var(--white);
   text-transform: uppercase;
