@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800;900&family=Inter:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600&display=swap');
 
 :root {
   --obsidian: #0A0A0B;
@@ -16,7 +16,7 @@
   --border-radius-md: 12px;
   --shadow-premium: 0 20px 50px rgba(0, 0, 0, 0.5);
   --blur-amount: 20px;
-  --font-heading: 'Outfit', sans-serif;
+  --font-heading: 'Bebas Neue', sans-serif;
   --font-body: 'Inter', sans-serif;
 }
 
