@@ -55,11 +55,13 @@ export async function middleware(request) {
         }
     }
 
-    // Protect dashboard data API — only allow GET with valid session
-    if (pathname.startsWith('/api/dashboard') && pathname !== '/api/dashboard/auth' && request.method === 'GET') {
-        const valid = await verifySessionCookie(request);
-        if (!valid) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    // Protect dashboard data API — GET requires session, POST requires session on /refund
+    if (pathname.startsWith('/api/dashboard') && pathname !== '/api/dashboard/auth') {
+        if (request.method === 'GET' || (request.method === 'POST' && pathname === '/api/dashboard/refund')) {
+            const valid = await verifySessionCookie(request);
+            if (!valid) {
+                return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+            }
         }
     }
 
