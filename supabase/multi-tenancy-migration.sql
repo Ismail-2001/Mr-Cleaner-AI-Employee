@@ -70,3 +70,26 @@ UPDATE bookings SET business_id = '00000000-0000-0000-0000-000000000001' WHERE b
 UPDATE chat_sessions SET business_id = '00000000-0000-0000-0000-000000000001' WHERE business_id IS NULL;
 UPDATE usage_logs SET business_id = '00000000-0000-0000-0000-000000000001' WHERE business_id IS NULL;
 UPDATE business_knowledge SET business_id = '00000000-0000-0000-0000-000000000001' WHERE business_id IS NULL;
+
+-- TCPA SMS CONSENT
+-- Required for TCPA compliance. Customer must explicitly opt-in to SMS.
+-- Without this, sending promotional/SMS messages is illegal.
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS sms_consent BOOLEAN DEFAULT false;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS sms_consent_timestamp TIMESTAMPTZ;
+
+-- Index for consent lookups (checking if a customer has opted in)
+CREATE INDEX IF NOT EXISTS idx_bookings_sms_consent
+  ON bookings (phone, business_id, sms_consent)
+  WHERE sms_consent = true;
+
+-- DAILY SUMMARY: Track daily digest send status per business
+CREATE TABLE IF NOT EXISTS daily_summaries (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  business_id UUID REFERENCES businesses(id) NOT NULL,
+  summary_date DATE NOT NULL,
+  booking_count INTEGER DEFAULT 0,
+  total_revenue NUMERIC DEFAULT 0,
+  sent_via TEXT,           -- 'sms' | 'email' | 'failed'
+  sent_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(business_id, summary_date)
+);
