@@ -34,11 +34,23 @@ const STEPS = [
         },
     },
     {
+        id: 'lemonsqueezy',
+        title: 'Payments — LemonSqueezy (Recommended)',
+        env: 'LEMONSQUEEZY_API_KEY + STORE_ID + VARIANT_ID',
+        url: 'https://app.lemonsqueezy.com/settings/api',
+        guide: 'Create a free LemonSqueezy account (works in 190+ countries, including Pakistan). Go to Settings > API and generate a key. Create a "Deposit" product with one variant, copy the Store ID and Variant ID. Set webhook to your-domain.com/api/lemonsqueezy/webhook with order_created and order_refunded events.',
+        check: async () => {
+            const res = await fetch('/api/health');
+            const data = await res.json();
+            return data.lemonsqueezy === 'configured';
+        },
+    },
+    {
         id: 'stripe',
-        title: 'Payments — Stripe Account',
+        title: 'Payments — Stripe (Fallback)',
         env: 'STRIPE_SECRET_KEY',
         url: 'https://dashboard.stripe.com/apikeys',
-        guide: 'From Stripe Dashboard > Developers > API Keys, copy the Secret Key. Also set up a webhook endpoint pointing to your-domain.com/api/stripe/webhook with the checkout.session.completed event.',
+        guide: 'Optional. Only needed if you want Stripe as a backup. From Stripe Dashboard > Developers > API Keys, copy the Secret Key. Set webhook to your-domain.com/api/stripe/webhook with checkout.session.completed event.',
         check: async () => {
             const res = await fetch('/api/health');
             const data = await res.json();
@@ -125,7 +137,7 @@ function StepCard({ step, index, status, onCheck }) {
                                 fontSize: '0.8rem',
                                 textDecoration: 'none',
                             }}>
-                                Open {step.id === 'gemini' ? 'Google AI Studio' : step.id === 'supabase' ? 'Supabase' : step.id === 'stripe' ? 'Stripe Dashboard' : step.id === 'calendar' ? 'Google Cloud Console' : step.id === 'twilio' ? 'Twilio Console' : step.id === 'email' ? 'Resend' : 'Site'} &rarr;
+                                Open {step.id === 'gemini' ? 'Google AI Studio' : step.id === 'supabase' ? 'Supabase' : step.id === 'lemonsqueezy' ? 'LemonSqueezy Dashboard' : step.id === 'stripe' ? 'Stripe Dashboard' : step.id === 'calendar' ? 'Google Cloud Console' : step.id === 'twilio' ? 'Twilio Console' : step.id === 'email' ? 'Resend' : 'Site'} &rarr;
                             </a>
                         )}
                         <button onClick={() => onCheck(step.id)} disabled={status === 'checking'} style={{
@@ -166,6 +178,7 @@ export default function SetupPage() {
             switch (stepId) {
                 case 'gemini': passed = data.ai === 'connected'; break;
                 case 'supabase': passed = data.supabase === 'connected'; break;
+                case 'lemonsqueezy': passed = data.lemonsqueezy === 'configured'; break;
                 case 'stripe': passed = data.stripe === 'configured'; break;
                 case 'calendar': passed = data.calendar === 'configured'; break;
                 case 'twilio': passed = data.twilio === 'configured'; break;

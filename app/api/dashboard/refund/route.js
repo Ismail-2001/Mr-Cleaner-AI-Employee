@@ -1,4 +1,4 @@
-import { verifySession, COOKIE_NAME } from '@/lib/session';
+import { requireSession } from '@/lib/session';
 import { processRefund } from '@/lib/refund';
 import { DEFAULT_BUSINESS_ID } from '@/lib/tenant';
 
@@ -18,16 +18,8 @@ import { DEFAULT_BUSINESS_ID } from '@/lib/tenant';
 export async function POST(req) {
     const requestId = crypto.randomUUID();
 
-    // AUTH: Verify dashboard session cookie.
-    // The middleware only protects GET /api/dashboard — POST needs explicit check.
-    const cookie = req.cookies.get(COOKIE_NAME);
-    const { valid } = await verifySession(cookie?.value);
-    if (!valid) {
-        return Response.json(
-            { error: { code: 'UNAUTHORIZED', message: 'Dashboard session required', request_id: requestId } },
-            { status: 401 }
-        );
-    }
+    const { response } = await requireSession(req);
+    if (response) return response;
 
     try {
         const body = await req.json();

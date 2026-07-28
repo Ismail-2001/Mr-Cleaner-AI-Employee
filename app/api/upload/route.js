@@ -15,6 +15,7 @@
  *   - Rate limited: 5 uploads/min per IP
  */
 
+import crypto from 'crypto';
 import { processAndUploadPhoto, detectImageMime } from '@/lib/photo-upload';
 import { checkBookingRateLimit } from '@/lib/rate-limit';
 
@@ -62,6 +63,15 @@ export async function POST(req) {
 
         // Read file as buffer
         const buffer = Buffer.from(await file.arrayBuffer());
+
+        // Max 5MB — reject oversized files before any processing
+        const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+        if (buffer.length > MAX_UPLOAD_BYTES) {
+            return Response.json(
+                { error: { code: 'FILE_TOO_LARGE', message: `File exceeds 5MB limit (${(buffer.length / 1024 / 1024).toFixed(1)}MB). Please compress and try again.` } },
+                { status: 413 }
+            );
+        }
 
         // Detect actual mime type from magic bytes (don't trust Content-Type header)
         const detectedMime = detectImageMime(buffer);

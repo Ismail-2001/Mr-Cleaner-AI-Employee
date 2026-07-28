@@ -21,7 +21,11 @@ import * as Sentry from '@sentry/nextjs';
 import { getJobberAuthUrl, exchangeJobberCode, verifyJobberWebhook, parseJobberEvent, syncBookingToJobber } from '@/lib/jobber';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { tryRedisOp } from '@/lib/redis';
+import { checkWebhookRateLimit } from '@/lib/rate-limit';
 import crypto from 'crypto';
+
+// ─── Idempotency: in-memory dedup fallback ───────────────────────────────────
+const dedupMemory = new Map();
 
 // ─── GET: OAuth Initiation ───────────────────────────────────────────────────
 
@@ -57,6 +61,19 @@ export async function GET(req) {
 export async function POST(req) {
     const requestId = crypto.randomUUID();
 
+    // RATE LIMITING: 60 requests/min per IP
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+        || req.headers.get('x-real-ip')
+        || '127.0.0.1';
+    const rateLimit = await checkWebhookRateLimit(ip);
+    if (rateLimit) {
+        console.log(`[${requestId}] Jobber webhook rate limited ip=${ip}`);
+        return Response.json({ status: 'rate_limited' }, {
+            status: 429,
+            headers: { 'Retry-After': String(rateLimit.retryAfterSec) },
+        });
+    }
+
     try {
         const rawBody = await req.text();
         const signature = req.headers.get('x-jobber-signature');
@@ -75,6 +92,30 @@ export async function POST(req) {
         }
 
         console.log(`[${requestId}] Jobber event: ${event.type}`);
+
+        // ─── Idempotency: dedup by raw body hash ─────────────────────────────────
+        const dedupKey = 'jobber:dedup:' + crypto.createHash('sha256').update(rawBody).digest('hex');
+        const dedupResult = await tryRedisOp(async (redis) => {
+            const added = await redis.set(dedupKey, '1', { nx: true, ex: 300 });
+            return added !== null;
+        });
+        if (dedupResult === false) {
+            console.log(`[${requestId}] Duplicate Jobber event, skipping.`);
+            return Response.json({ status: 'ok', duplicate: true });
+        }
+        if (dedupResult === null) {
+            // Redis unavailable — use in-memory cache as fallback
+            if (dedupMemory.has(dedupKey)) {
+                console.log(`[${requestId}] Duplicate Jobber event (memory), skipping.`);
+                return Response.json({ status: 'ok', duplicate: true });
+            }
+            dedupMemory.set(dedupKey, Date.now());
+            // Evict entries older than 5 minutes
+            const cutoff = Date.now() - 300_000;
+            for (const [key, ts] of dedupMemory) {
+                if (ts < cutoff) dedupMemory.delete(key);
+            }
+        }
 
         // Try QStash for reliable async processing
         const qstashToken = process.env.QSTASH_TOKEN;

@@ -13,16 +13,12 @@
  */
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { verifySession, COOKIE_NAME } from '@/lib/session';
+import { requireSession } from '@/lib/session';
 import { DEFAULT_BUSINESS_ID } from '@/lib/tenant';
 
 export async function GET(req) {
-    // AUTH: Verify dashboard session cookie
-    const cookie = req.cookies.get(COOKIE_NAME);
-    const { valid } = await verifySession(cookie?.value);
-    if (!valid) {
-        return Response.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const { response } = await requireSession(req);
+    if (response) return response;
 
     if (!supabaseAdmin) {
         return Response.json({ error: 'Database not configured' }, { status: 503 });

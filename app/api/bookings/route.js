@@ -7,6 +7,7 @@ import { validateBody, BookingRequestSchema } from '@/lib/api-validation';
 import { checkBookingRateLimit } from '@/lib/rate-limit';
 import { redactBookingData } from '@/lib/pii-redact';
 import { resolveBusinessId } from '@/lib/tenant';
+import { tryRedisOp } from '@/lib/redis';
 
 /**
  * WHY THIS RE-VERIFICATION EXISTS:
@@ -57,6 +58,34 @@ async function isSlotStillAvailable(date, time, businessId) {
         const slotMinutes = parseTimeToMinutes(slot.time);
         return slotMinutes === requestedMinutes && slot.status === 'available';
     });
+}
+
+// ─── Advisory Lock: Redis-based distributed lock ──────────────────────────────
+// Prevents TOCTOU race: two concurrent requests both see a slot as available
+// and both proceed to insert. Lock key = date:time:businessId.
+// In-memory fallback is intentionally omitted — a false sense of security on
+// serverless is worse than no lock. When Redis is unavailable, we rely on the
+// DB unique constraint (idx_unique_slot) as the hard backstop.
+const SLOT_LOCK_TTL_MS = 30_000;
+
+async function acquireSlotLock(date, time, businessId) {
+    const lockKey = `booking:lock:${businessId}:${date}:${time}`;
+
+    const redisResult = await tryRedisOp(async (redis) => {
+        const acquired = await redis.set(lockKey, '1', { nx: true, px: SLOT_LOCK_TTL_MS });
+        return acquired !== null;
+    });
+
+    if (redisResult === true) return true;
+    if (redisResult === false) return false;
+
+    // Redis unavailable — log warning, rely on DB constraint
+    console.warn(`Redis unavailable for slot lock — relying on DB unique constraint`);
+    return true;
+}
+
+function releaseSlotLock(date, time, businessId) {
+    // Redis keys expire via PX; no-op for clean-up callers
 }
 
 export async function GET(req) {
@@ -140,15 +169,30 @@ export async function POST(req) {
         // MULTI-TENANT: Resolve which business this booking belongs to.
         const businessId = await resolveBusinessId(req);
 
-        // RACE CONDITION FIX: Re-verify slot availability immediately before insert.
+        // RACE CONDITION FIX: Distributed advisory lock + slot re-verify.
+        // SOFT PRE-CHECK: Best-effort availability verification before insert.
+        // The DB unique constraint (idx_unique_slot) is the SOURCE OF TRUTH.
+        // This check prevents most conflicts early, but is not a hard guarantee.
         if (bookingData.booking_date && bookingData.booking_time) {
+            const lockAcquired = await acquireSlotLock(
+                bookingData.booking_date,
+                bookingData.booking_time,
+                businessId
+            );
+            if (!lockAcquired) {
+                console.log(`[${requestId}] Slot lock contended:`, bookingData.booking_date, bookingData.booking_time);
+                return Response.json({
+                    error: { code: 'SLOT_TAKEN', message: 'This time slot is being booked by another customer. Please select a different time.', request_id: requestId }
+                }, { status: 409 });
+            }
+
             const stillAvailable = await isSlotStillAvailable(
                 bookingData.booking_date,
                 bookingData.booking_time,
                 businessId
             );
             if (!stillAvailable) {
-                console.log(`[${requestId}] Slot taken:`, bookingData.booking_date, bookingData.booking_time);
+                console.log(`[${requestId}] Pre-check slot taken:`, bookingData.booking_date, bookingData.booking_time);
                 return Response.json({
                     error: { code: 'SLOT_TAKEN', message: 'This time slot was just booked by another customer. Please select a different time.', request_id: requestId }
                 }, { status: 409 });
@@ -157,6 +201,10 @@ export async function POST(req) {
 
         // 1. Save to Database
         const { data, error } = await createBooking(bookingData, businessId);
+        // Release the slot lock regardless of outcome
+        if (bookingData.booking_date && bookingData.booking_time) {
+            releaseSlotLock(bookingData.booking_date, bookingData.booking_time, businessId);
+        }
         if (error) {
             if (error.code === 'SLOT_TAKEN') {
                 return Response.json({ error: { ...error, request_id: requestId } }, { status: 409 });

@@ -50,8 +50,8 @@ export default function Home() {
                         <p style={{ fontSize: '1.15rem', color: 'var(--text-muted)', maxWidth: '500px', margin: '0 auto' }}>Drag the slider to compare before and after our detailing service</p>
                     </div>
                     <BeforeAfterSlider
-                        beforeSrc="https://images.unsplash.com-1507136566046-c830cc9635b3?w=800&q=80"
-                        afterSrc="https://images.unsplash.com-1507136566046-c830cc9635b3?w=800&q=80&sat=-100"
+                        beforeSrc="/images/car-before.jpg"
+                        afterSrc="/images/car-after.jpg"
                         beforeAlt="Vehicle before detailing"
                         afterAlt="Vehicle after detailing"
                     />

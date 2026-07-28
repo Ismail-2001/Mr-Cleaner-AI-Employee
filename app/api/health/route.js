@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { tryRedisOp } from '@/lib/redis';
 
 export async function GET() {
     const checks = {};
@@ -27,6 +28,15 @@ export async function GET() {
     // Stripe
     checks.stripe = process.env.STRIPE_SECRET_KEY ? 'configured' : 'not_configured';
 
+    // LemonSqueezy
+    checks.lemonsqueezy = (process.env.LEMONSQUEEZY_API_KEY && process.env.LEMONSQUEEZY_STORE_ID)
+        ? 'configured'
+        : 'not_configured';
+
+    // Redis / Upstash (rate limiting + advisory locks + caching)
+    const redisOk = await tryRedisOp(r => r.set('health:ping', '1', { ex: 60 }));
+    checks.redis = redisOk === true ? 'connected' : 'not_configured';
+
     // Dashboard auth
     checks.dashboard = (process.env.DASHBOARD_PASSWORD && process.env.DASHBOARD_SESSION_SECRET)
         ? 'configured'
@@ -54,15 +64,19 @@ export async function GET() {
         checks.calendar = 'unhealthy';
     }
 
+    // PII encryption
+    checks.pii_encryption = process.env.ENCRYPTION_KEY ? 'configured' : 'not_configured';
+
     const values = Object.values(checks);
-    const status = values.includes('unhealthy') ? 'degraded' : 'ok';
+    const status = values.includes('unhealthy') ? 'degraded' : values.includes('not_configured') ? 'degraded' : 'ok';
+    const httpStatus = values.includes('unhealthy') ? 503 : status === 'degraded' ? 207 : 200;
 
     return Response.json({
         status,
         timestamp: new Date().toISOString(),
         ...checks,
     }, {
-        status: status === 'ok' ? 200 : 207,
+        status: httpStatus,
         headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
     });
 }

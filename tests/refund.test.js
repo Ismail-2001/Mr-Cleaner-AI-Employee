@@ -5,6 +5,11 @@ const OTHER_BIZ = '11111111-1111-1111-1111-111111111111';
 
 const mockFrom = vi.fn();
 
+vi.mock('@/lib/lemon-squeezy', () => ({
+    isConfigured: () => false,
+    createRefund: vi.fn(),
+}));
+
 vi.mock('@/lib/supabase-admin', () => ({
     supabaseAdmin: {
         from: (...args) => mockFrom(...args),
@@ -79,14 +84,14 @@ describe('processRefund', () => {
         expect(result.error.code).toBe('INVALID_STATUS');
     });
 
-    it('returns error if no Stripe session ID in notes', async () => {
+    it('returns error if no payment info in notes', async () => {
         mockFrom.mockReturnValue(makeChain({
-            data: { id: '1', status: 'confirmed', notes: 'No session here' },
+            data: { id: '1', status: 'confirmed', notes: 'No payment info here' },
             error: null,
         }));
         const result = await processRefund('1', DEFAULT_BIZ);
         expect(result.success).toBe(false);
-        expect(result.error.code).toBe('NO_STRIPE_SESSION');
+        expect(result.error.code).toBe('NO_PAYMENT_FOUND');
     });
 
     it('processes refund successfully for confirmed booking', async () => {

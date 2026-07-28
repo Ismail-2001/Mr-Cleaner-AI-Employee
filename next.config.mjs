@@ -2,6 +2,12 @@ import { withSentryConfig } from '@sentry/nextjs';
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+    images: {
+        remotePatterns: [
+            { protocol: 'https', hostname: 'images.unsplash.com' },
+        ],
+        // For production: download images to public/images/ and remove remotePatterns
+    },
     headers: async () => [
         {
             source: '/(.*)',

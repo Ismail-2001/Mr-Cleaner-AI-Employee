@@ -10,6 +10,11 @@ vi.mock('@/lib/stripe', () => ({
     createDepositSession: vi.fn(),
 }));
 
+vi.mock('@/lib/lemon-squeezy', () => ({
+    isConfigured: () => false,
+    createCheckout: vi.fn(),
+}));
+
 vi.mock('@/lib/supabase-admin', () => ({
     supabaseAdmin: null,
 }));
@@ -213,12 +218,13 @@ describe('sync_booking_state', () => {
 
 // ---- generate_deposit_link ----
 describe('generate_deposit_link', () => {
-    it('returns mock URL when Stripe is not configured', async () => {
+    it('returns mock URL when no payment provider is configured', async () => {
         const result = await executeTool('generate_deposit_link', { amount: 50, service: 'Executive Preservation' });
         const parsed = JSON.parse(result);
-        expect(parsed.payment_url).toContain('checkout.stripe.com');
+        expect(parsed.payment_url).toContain('checkout.lemonsqueezy.com');
         expect(parsed.deposit_amount).toBe(50);
         expect(parsed.currency).toBe('USD');
+        expect(parsed.provider).toBe('mock');
     });
 
     it('rejects deposit below $1', async () => {

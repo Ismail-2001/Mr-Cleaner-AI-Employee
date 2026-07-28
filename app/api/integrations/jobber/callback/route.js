@@ -10,6 +10,7 @@
 import * as Sentry from '@sentry/nextjs';
 import { exchangeJobberCode } from '@/lib/jobber';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { encrypt } from '@/lib/encrypt';
 
 export async function GET(req) {
     const { searchParams } = new URL(req.url);
@@ -60,8 +61,8 @@ export async function GET(req) {
         await supabaseAdmin.from('integrations').upsert({
             business_id: businessId,
             provider: 'jobber',
-            access_token: tokens.accessToken,
-            refresh_token: tokens.refreshToken,
+            access_token: encrypt(tokens.accessToken),
+            refresh_token: encrypt(tokens.refreshToken),
             expires_at: new Date(Date.now() + tokens.expiresIn * 1000).toISOString(),
             provider_account_id: tokens.accountId,
             connected_at: new Date().toISOString(),
