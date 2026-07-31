@@ -2,7 +2,15 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { tryRedisOp } from '@/lib/redis';
 import { getAllBreakerStatus } from '@/lib/circuit-breaker';
 
-export async function GET() {
+export async function GET(req) {
+    const cronSecret = process.env.CRON_SECRET;
+    if (cronSecret) {
+        const authHeader = req.headers.get('authorization');
+        if (authHeader !== `Bearer ${cronSecret}`) {
+            return Response.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+    }
+
     const checks = {};
 
     // Supabase

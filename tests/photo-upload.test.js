@@ -1,7 +1,30 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { detectImageMime, getSignedPhotoUrl } from '@/lib/photo-upload';
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────
+
+vi.mock('@sentry/nextjs', () => ({
+    captureException: vi.fn(),
+    captureMessage: vi.fn(),
+}));
+
+vi.mock('@/lib/stripe', () => ({
+    stripe: null,
+    createDepositSession: vi.fn().mockResolvedValue({ id: 'cs_test', url: 'https://checkout.stripe.com/test' }),
+}));
+
+vi.mock('@/lib/lemon-squeezy', () => ({
+    isConfigured: vi.fn().mockReturnValue(false),
+    createCheckout: vi.fn().mockResolvedValue({ id: 'ls_test', url: 'https://checkout.lemonsqueezy.com/test' }),
+}));
+
+vi.mock('@/lib/calendar', () => ({
+    checkAvailability: vi.fn().mockResolvedValue([]),
+}));
+
+vi.mock('@/lib/redis', () => ({
+    getRedisClient: vi.fn().mockReturnValue(null),
+    tryRedisOp: vi.fn().mockResolvedValue(null),
+}));
 
 const mockCreateSignedUrl = vi.fn().mockResolvedValue({
     data: { signedUrl: 'https://example.com/signed/photo.jpg?token=abc123' },
@@ -25,9 +48,12 @@ vi.mock('@/lib/supabase-admin', () => ({
                     }),
                 }),
             }),
+            upsert: vi.fn().mockResolvedValue({ data: null, error: null }),
         })),
     },
 }));
+
+import { detectImageMime, getSignedPhotoUrl } from '@/lib/photo-upload';
 
 // ─── Magic Byte Detection ────────────────────────────────────────────────────
 
