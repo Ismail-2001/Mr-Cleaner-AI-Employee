@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { tryRedisOp } from '@/lib/redis';
+import { getAllBreakerStatus } from '@/lib/circuit-breaker';
 
 export async function GET() {
     const checks = {};
@@ -67,7 +68,10 @@ export async function GET() {
     // PII encryption
     checks.pii_encryption = process.env.ENCRYPTION_KEY ? 'configured' : 'not_configured';
 
-    const values = Object.values(checks);
+    // Circuit breakers
+    checks.circuit_breakers = getAllBreakerStatus();
+
+    const values = Object.values(checks).filter(v => typeof v === 'string');
     const status = values.includes('unhealthy') ? 'degraded' : values.includes('not_configured') ? 'degraded' : 'ok';
     const httpStatus = values.includes('unhealthy') ? 503 : status === 'degraded' ? 207 : 200;
 

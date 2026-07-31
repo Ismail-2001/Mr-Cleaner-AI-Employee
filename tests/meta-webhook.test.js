@@ -3,6 +3,12 @@ import crypto from 'crypto';
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────
 
+vi.mock('@sentry/nextjs', () => ({
+    captureException: vi.fn(),
+    captureMessage: vi.fn(),
+    withScope: vi.fn((cb) => { cb({ setTag: vi.fn(), setExtra: vi.fn() }); }),
+}));
+
 vi.mock('@/lib/maestro', () => ({
     orchestrateMaya: vi.fn().mockResolvedValue({
         role: 'assistant',

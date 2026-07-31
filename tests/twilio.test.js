@@ -2,6 +2,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────
 
+vi.mock('@sentry/nextjs', () => ({
+    captureException: vi.fn(),
+    captureMessage: vi.fn(),
+    withScope: vi.fn((cb) => { cb({ setTag: vi.fn(), setExtra: vi.fn() }); }),
+}));
+
 const mockMessagesCreate = vi.fn();
 
 vi.mock('twilio', () => ({
@@ -70,8 +76,7 @@ describe('sendSMS', () => {
         const { sendSMS } = await import('@/lib/twilio');
         const promise = sendSMS('+15551234567', 'Test message');
 
-        await vi.advanceTimersByTimeAsync(1000);
-        await vi.advanceTimersByTimeAsync(2000);
+        await vi.runAllTimersAsync();
 
         const result = await promise;
 
@@ -93,8 +98,7 @@ describe('sendSMS', () => {
         const { sendSMS } = await import('@/lib/twilio');
         const promise = sendSMS('+15551234567', 'Test message');
 
-        await vi.advanceTimersByTimeAsync(1000);
-        await vi.advanceTimersByTimeAsync(2000);
+        await vi.runAllTimersAsync();
 
         const result = await promise;
 

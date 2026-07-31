@@ -2,6 +2,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────
 
+vi.mock('@sentry/nextjs', () => ({
+    captureException: vi.fn(),
+    captureMessage: vi.fn(),
+    withScope: vi.fn((cb) => { cb({ setTag: vi.fn(), setExtra: vi.fn() }); }),
+}));
+
 vi.mock('@/lib/maestro', () => ({
     orchestrateMaya: vi.fn().mockResolvedValue({
         role: 'assistant',
