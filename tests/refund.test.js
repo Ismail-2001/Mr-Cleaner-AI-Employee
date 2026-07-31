@@ -35,7 +35,11 @@ vi.mock('@sentry/nextjs', () => ({
     captureException: vi.fn(),
 }));
 
-import { processRefund } from '@/lib/refund';
+vi.mock('@/lib/calendar', () => ({
+    cancelCalendarEvent: vi.fn().mockResolvedValue({ success: true }),
+}));
+
+import { processRefund, processRefundWithCancel } from '@/lib/refund';
 
 function makeChain(result) {
     const chain = {};
@@ -152,5 +156,35 @@ describe('processRefund', () => {
         const result = await processRefund('cross_tenant_booking', DEFAULT_BIZ);
         expect(result.success).toBe(false);
         expect(result.error.code).toBe('BOOKING_NOT_FOUND');
+    });
+
+    it('processRefundWithCancel returns error when refund fails', async () => {
+        mockFrom.mockReturnValue(makeChain({ data: null, error: null }));
+
+        const result = await processRefundWithCancel('nonexistent-id', DEFAULT_BIZ);
+        expect(result.success).toBe(false);
+        expect(result.error.code).toBe('BOOKING_NOT_FOUND');
+    });
+
+    it('processRefundWithCancel succeeds and attempts calendar cancellation', async () => {
+        const booking = {
+            id: 'booking_1',
+            status: 'confirmed',
+            customer_name: 'John Doe',
+            service: 'Signature Ceramic',
+            service_price: 450,
+            notes: 'Deposit paid via Stripe. Session: cs_test_abc123',
+            google_event_id: 'gcal_event_123',
+        };
+
+        mockFrom
+            .mockReturnValueOnce(makeChain({ data: booking, error: null }))  // first call: fetch for refund
+            .mockReturnValueOnce(makeChain({ data: booking, error: null })); // second call: fetch for calendar cancel
+
+        mockStripeSessionsRetrieve.mockResolvedValue({ payment_intent: 'pi_test_xyz789' });
+        mockStripeRefundsCreate.mockResolvedValue({ id: 're_test_refund', amount: 5000, status: 'succeeded' });
+
+        const result = await processRefundWithCancel('booking_1', DEFAULT_BIZ);
+        expect(result.success).toBe(true);
     });
 });

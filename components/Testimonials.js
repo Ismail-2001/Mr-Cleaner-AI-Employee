@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import styles from './Testimonials.module.css';
 import { Star, Quote } from 'lucide-react';
 
-const testimonials = [
+const defaultTestimonials = [
     {
         name: 'James Richardson',
         role: 'BMW M4 Owner',
@@ -54,7 +54,8 @@ const cardReveal = {
     },
 };
 
-export default function Testimonials() {
+export default function Testimonials({ config }) {
+    const testimonials = config || defaultTestimonials;
     return (
         <section className={styles.section}>
             <div className="container">

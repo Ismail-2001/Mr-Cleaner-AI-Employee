@@ -36,7 +36,7 @@ function AnimatedNumber({ target, suffix = '', prefix = '' }) {
     );
 }
 
-const stats = [
+const defaultStats = [
     { number: 2400, suffix: '+', label: 'Details Completed', description: 'Premium vehicles serviced' },
     { number: 98, suffix: '%', label: 'Satisfaction Rate', description: 'Five-star reviews' },
     { number: 45, suffix: 'min', label: 'Average Booking', description: 'From chat to confirmed' },
@@ -59,7 +59,8 @@ const cardReveal = {
     },
 };
 
-export default function StatsCounter() {
+export default function StatsCounter({ config }) {
+    const stats = config || defaultStats;
     return (
         <section className={styles.section}>
             <div className="container">

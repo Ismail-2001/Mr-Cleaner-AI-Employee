@@ -17,6 +17,14 @@ import CursorRing from '../components/CursorRing';
 export default function Home() {
     const [isChatOpen, setIsChatOpen] = useState(false);
     const [initialService, setInitialService] = useState(null);
+    const [landingConfig, setLandingConfig] = useState(null);
+
+    useEffect(() => {
+        fetch('/api/config')
+            .then(r => r.ok ? r.json() : null)
+            .then(setLandingConfig)
+            .catch(() => {});
+    }, []);
 
     useEffect(() => {
         const handleOpenChat = (e) => {
@@ -38,8 +46,8 @@ export default function Home() {
             <PageLoader />
             <main className="grain" style={{ backgroundColor: 'var(--obsidian)' }}>
             <Navbar />
-            <Hero />
-            <StatsCounter />
+            <Hero config={landingConfig?.hero} />
+            <StatsCounter config={landingConfig?.stats} />
             <ServiceMenu />
             <ValueProps />
             <section style={{ padding: 'var(--section-padding)', backgroundColor: 'var(--obsidian)' }}>
@@ -57,7 +65,7 @@ export default function Home() {
                     />
                 </div>
             </section>
-            <Testimonials />
+            <Testimonials config={landingConfig?.testimonials} />
             <CTASection />
 
             <ChatButton />
@@ -93,17 +101,17 @@ export default function Home() {
                                     fontWeight: '800',
                                     fontSize: '0.85rem',
                                     fontFamily: 'var(--font-heading)'
-                                }}>MC</span>
-                                <h3 style={{ margin: 0, fontSize: '1.2rem' }}>Mr. Cleaner</h3>
+                                }}>{landingConfig?.footer?.brandInitials || 'MC'}</span>
+                                <h3 style={{ margin: 0, fontSize: '1.2rem' }}>{landingConfig?.footer?.brandName || 'Mr. Cleaner'}</h3>
                             </div>
                             <p style={{ color: 'rgba(255,255,255,0.4)', lineHeight: '1.7', fontSize: '0.9rem', maxWidth: '280px' }}>
-                                Texas&apos; premier mobile detailing concierge. Powered by AI, perfected by hand.
+                                {landingConfig?.footer?.tagline || "Texas\u2019 premier mobile detailing concierge. Powered by AI, perfected by hand."}
                             </p>
                         </div>
                         <div>
                             <h4 style={{ marginBottom: '20px', color: 'var(--white)', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Services</h4>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                {['Executive Preservation', 'The Master Detail', 'Signature Ceramic'].map((s) => (
+                                {(landingConfig?.footer?.services || ['Executive Preservation', 'The Master Detail', 'Signature Ceramic']).map((s) => (
                                     <a key={s} href="#services" style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.9rem', textDecoration: 'none', transition: 'color 0.2s' }}>{s}</a>
                                 ))}
                             </div>
@@ -111,17 +119,21 @@ export default function Home() {
                         <div>
                             <h4 style={{ marginBottom: '20px', color: 'var(--white)', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Contact</h4>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.9rem' }}>Austin &bull; Dallas &bull; Houston</p>
-                                <a href="mailto:concierge@mrcleaner.com" style={{ color: 'var(--gold)', fontSize: '0.9rem', textDecoration: 'none' }}>concierge@mrcleaner.com</a>
-                                <a href="tel:+15074797804" style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.9rem', textDecoration: 'none' }}>+1 (507) 479-7804</a>
+                                <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.9rem' }}>{landingConfig?.footer?.locations || 'Austin \u00b7 Dallas \u00b7 Houston'}</p>
+                                <a href={`mailto:${landingConfig?.footer?.email || 'concierge@mrcleaner.com'}`} style={{ color: 'var(--gold)', fontSize: '0.9rem', textDecoration: 'none' }}>{landingConfig?.footer?.email || 'concierge@mrcleaner.com'}</a>
+                                <a href={`tel:${landingConfig?.footer?.phone?.replace(/\D/g, '') || '+15074797804'}`} style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.9rem', textDecoration: 'none' }}>{landingConfig?.footer?.phone || '+1 (507) 479-7804'}</a>
                             </div>
                         </div>
                         <div>
                             <h4 style={{ marginBottom: '20px', color: 'var(--white)', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Hours</h4>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.9rem' }}>Mon - Sat: 8 AM - 6 PM</p>
-                                <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.9rem' }}>Sunday: Closed</p>
-                                <p style={{ color: 'var(--gold)', fontSize: '0.9rem' }}>AI Concierge: 24/7</p>
+                                {(landingConfig?.footer?.hours || [
+                                    { label: 'Mon - Sat: 8 AM - 6 PM' },
+                                    { label: 'Sunday: Closed' },
+                                    { label: 'AI Concierge: 24/7', gold: true },
+                                ]).map((h, i) => (
+                                    <p key={i} style={{ color: h.gold ? 'var(--gold)' : 'rgba(255,255,255,0.4)', fontSize: '0.9rem' }}>{h.label}</p>
+                                ))}
                             </div>
                         </div>
                     </div>
@@ -137,8 +149,8 @@ export default function Home() {
                         fontSize: '0.8rem',
                         color: 'rgba(255,255,255,0.2)'
                     }}>
-                        <p>&copy; 2026 Mr. Cleaner Mobile Detailing Texas. All rights reserved.</p>
-                        <p>Built with AI &bull; Powered by Maya</p>
+                        <p>{landingConfig?.footer?.copyright || '\u00a9 2026 Mr. Cleaner Mobile Detailing Texas. All rights reserved.'}</p>
+                        <p>{landingConfig?.footer?.tagline2 || 'Built with AI \u00b7 Powered by Maya'}</p>
                     </div>
                 </div>
             </footer>

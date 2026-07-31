@@ -2,7 +2,12 @@ import { describe, it, expect, vi } from 'vitest';
 import { executeTool } from '@/lib/tools';
 
 vi.mock('@/lib/redis', () => ({
-    tryRedisOp: () => Promise.resolve(null),
+    tryRedisOp: (fn) => fn({
+        get: async () => '{"sedan":999,"SUV":1111}',
+        set: async () => 'OK',
+        scan: async () => [0, []],
+        del: async () => 1,
+    }),
     getRedisClient: () => null,
 }));
 

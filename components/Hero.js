@@ -64,10 +64,14 @@ const trustReveal = {
     },
 };
 
-const line1Words = ['Your', 'Car', 'Deserves'];
-const line2Words = ['Elite', 'Treatment'];
+const defaultLine1 = ['Your', 'Car', 'Deserves'];
+const defaultLine2 = ['Elite', 'Treatment'];
 
-export default function Hero() {
+export default function Hero({ config }) {
+    const line1Words = config?.line1 || defaultLine1;
+    const line2Words = config?.line2 || defaultLine2;
+    const badge = config?.badge || "Texas' #1 Luxury Detailers";
+    const description = config?.description || 'Book your premium mobile detail in 60 seconds. Our AI Maya handles everything 24/7. We come to you.';
     const heroRef = useRef(null);
     const { scrollYProgress } = useScroll({
         target: heroRef,
@@ -94,7 +98,7 @@ export default function Hero() {
             >
                 <motion.div className={styles.badge} variants={badgeReveal}>
                     <span className={styles.badgeDot}></span>
-                    Texas&apos; #1 Luxury Detailers
+                    {badge}
                 </motion.div>
 
                 <h1 className={styles.title}>
@@ -130,8 +134,7 @@ export default function Hero() {
                 </h1>
 
                 <motion.p className={styles.description} variants={descReveal} initial="hidden" animate="visible">
-                    Book your premium mobile detail in 60 seconds. Our AI Maya handles
-                    everything 24/7. We come to you.
+                    {description}
                 </motion.p>
 
                 <motion.div className={styles.actions} variants={actionsReveal} initial="hidden" animate="visible">
