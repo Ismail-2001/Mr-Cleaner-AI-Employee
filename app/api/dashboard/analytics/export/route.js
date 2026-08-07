@@ -1,73 +1,97 @@
-/**
- * GET /api/dashboard/analytics/export — CSV export of bookings data
- *
- * Downloads a CSV file of all bookings for the business owner
- * to share with accountant/bookkeeper.
- *
- * SECURITY: business_id scoping on query. Without this, a multi-tenant
- * deployment would export ALL businesses' customer names and phone numbers
- * (PII) in a single CSV file — a critical data breach.
- *
- * Auth: Session cookie verified at handler level (defense-in-depth).
- * Middleware also protects GET /api/dashboard/*, but we verify here too.
- */
-
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { requireSession } from '@/lib/session';
 import { DEFAULT_BUSINESS_ID } from '@/lib/tenant';
 import { log } from '@/lib/logger';
 
+/**
+ * GET /api/dashboard/analytics/export — export bookings as CSV
+ *
+ * Auth: Session cookie required (defense-in-depth — middleware also protects /api/dashboard/*).
+ * Returns CSV file with all bookings for the business, scoped by date range.
+ */
 export async function GET(req) {
-    const { response } = await requireSession(req);
-    if (response) return response;
+    const { response: authError } = await requireSession(req);
+    if (authError) return authError;
 
     if (!supabaseAdmin) {
         return Response.json({ error: 'Database not configured' }, { status: 503 });
     }
 
-    // Business scope — only export bookings belonging to this business
     const businessId = DEFAULT_BUSINESS_ID;
+    const url = new URL(req.url);
+    const range = url.searchParams.get('range') || 'all';
 
     try {
-        const { data: bookings, error } = await supabaseAdmin
+        let query = supabaseAdmin
             .from('bookings')
-            .select('customer_name, phone, service, service_price, vehicle_type, booking_date, booking_time, status, created_at')
+            .select('customer_name, phone, service, vehicle_type, service_price, booking_date, booking_time, status, notes, created_at')
             .eq('business_id', businessId)
-            .order('booking_date', { ascending: false });
+            .order('created_at', { ascending: false })
+            .limit(1000);
+
+        if (range !== 'all') {
+            const days = parseInt(range.replace('d', ''), 10);
+            if (!isNaN(days) && days > 0) {
+                const fromDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+                query = query.gte('created_at', fromDate);
+            }
+        }
+
+        const { data: bookings, error } = await query;
 
         if (error) {
-            return Response.json({ error: error.message }, { status: 500 });
+            log.error('analytics-export', 'Failed to fetch bookings', { error: error.message });
+            return Response.json({ error: 'Failed to export data' }, { status: 500 });
         }
 
         if (!bookings || bookings.length === 0) {
-            return new Response('No bookings to export', { status: 200, headers: { 'Content-Type': 'text/csv' } });
+            return new Response('No bookings found for the selected period\n', {
+                headers: {
+                    'Content-Type': 'text/csv',
+                    'Content-Disposition': 'attachment; filename="bookings-export.csv"',
+                },
+            });
         }
 
         // Build CSV
-        const headers = ['Customer', 'Phone', 'Service', 'Price', 'Vehicle', 'Date', 'Time', 'Status', 'Created'];
-        const rows = bookings.map(b => [
-            `"${(b.customer_name || '').replace(/"/g, '""')}"`,
-            b.phone || '',
-            `"${(b.service || '').replace(/"/g, '""')}"`,
-            b.service_price ?? '',
-            b.vehicle_type || '',
-            b.booking_date || '',
-            b.booking_time || '',
-            b.status || '',
-            b.created_at ? new Date(b.created_at).toISOString() : '',
-        ]);
+        const headers = ['Customer Name', 'Phone', 'Service', 'Vehicle Type', 'Price', 'Date', 'Time', 'Status', 'Notes', 'Created At'];
+        const csvRows = [headers.join(',')];
 
-        const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+        for (const b of bookings) {
+            const row = [
+                escapeCsvField(b.customer_name),
+                escapeCsvField(b.phone),
+                escapeCsvField(b.service),
+                escapeCsvField(b.vehicle_type),
+                b.service_price || 0,
+                b.booking_date || '',
+                b.booking_time || '',
+                b.status || '',
+                escapeCsvField(b.notes),
+                b.created_at || '',
+            ];
+            csvRows.push(row.join(','));
+        }
 
-        return new Response(csv, {
-            status: 200,
+        const csv = csvRows.join('\n');
+
+        return new Response(csv + '\n', {
             headers: {
                 'Content-Type': 'text/csv',
-                'Content-Disposition': `attachment; filename="bookings-export-${new Date().toISOString().split('T')[0]}.csv"`,
+                'Content-Disposition': `attachment; filename="bookings-export-${new Date().toISOString().slice(0, 10)}.csv"`,
             },
         });
     } catch (error) {
-        log.error('analytics-export', 'CSV export error', { error: error.message });
+        log.error('analytics-export', 'Export error', { error: error.message });
         return Response.json({ error: 'Export failed' }, { status: 500 });
     }
+}
+
+function escapeCsvField(field) {
+    if (!field) return '';
+    const str = String(field);
+    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
 }

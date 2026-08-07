@@ -22,7 +22,11 @@ const DEFAULT_SETTINGS = {
     },
 };
 
-export async function GET() {
+export async function GET(req) {
+    // Auth required — prevents unauthenticated access to business config
+    const { session, response: authError } = await requireSession(req);
+    if (authError) return authError;
+
     if (!supabaseAdmin) {
         return Response.json({ settings: DEFAULT_SETTINGS });
     }

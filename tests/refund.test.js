@@ -46,6 +46,7 @@ function makeChain(result) {
     chain.select = vi.fn(() => chain);
     chain.eq = vi.fn(() => chain);
     chain.maybeSingle = vi.fn().mockResolvedValue(result);
+    chain.single = vi.fn().mockResolvedValue(result);
     chain.update = vi.fn(() => chain);
     return chain;
 }
@@ -89,10 +90,11 @@ describe('processRefund', () => {
     });
 
     it('returns error if no payment info in notes', async () => {
-        mockFrom.mockReturnValue(makeChain({
-            data: { id: '1', status: 'confirmed', notes: 'No payment info here' },
-            error: null,
-        }));
+        const booking = { id: '1', status: 'confirmed', notes: 'No payment info here' };
+        mockFrom
+            .mockReturnValueOnce(makeChain({ data: booking, error: null }))      // initial fetch
+            .mockReturnValueOnce(makeChain({ data: booking, error: null }))      // claim update
+            .mockReturnValueOnce(makeChain({ data: { status: 'refunding' }, error: null })); // verify claim
         const result = await processRefund('1', DEFAULT_BIZ);
         expect(result.success).toBe(false);
         expect(result.error.code).toBe('NO_PAYMENT_FOUND');
@@ -108,7 +110,10 @@ describe('processRefund', () => {
             notes: 'Deposit paid via Stripe. Session: cs_test_abc123',
         };
 
-        mockFrom.mockReturnValue(makeChain({ data: booking, error: null }));
+        mockFrom
+            .mockReturnValueOnce(makeChain({ data: booking, error: null }))      // initial fetch
+            .mockReturnValueOnce(makeChain({ data: booking, error: null }))      // claim update
+            .mockReturnValueOnce(makeChain({ data: { status: 'refunding' }, error: null })); // verify claim
 
         mockStripeSessionsRetrieve.mockResolvedValue({
             payment_intent: 'pi_test_xyz789',
@@ -178,8 +183,10 @@ describe('processRefund', () => {
         };
 
         mockFrom
-            .mockReturnValueOnce(makeChain({ data: booking, error: null }))  // first call: fetch for refund
-            .mockReturnValueOnce(makeChain({ data: booking, error: null })); // second call: fetch for calendar cancel
+            .mockReturnValueOnce(makeChain({ data: booking, error: null }))      // initial fetch
+            .mockReturnValueOnce(makeChain({ data: booking, error: null }))      // claim update
+            .mockReturnValueOnce(makeChain({ data: { status: 'refunding' }, error: null })) // verify claim
+            .mockReturnValueOnce(makeChain({ data: booking, error: null }));     // fetch for calendar cancel
 
         mockStripeSessionsRetrieve.mockResolvedValue({ payment_intent: 'pi_test_xyz789' });
         mockStripeRefundsCreate.mockResolvedValue({ id: 're_test_refund', amount: 5000, status: 'succeeded' });

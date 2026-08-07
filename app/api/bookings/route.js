@@ -85,10 +85,6 @@ async function acquireSlotLock(date, time, businessId) {
     return true;
 }
 
-function releaseSlotLock(date, time, businessId) {
-    // Redis keys expire via PX; no-op for clean-up callers
-}
-
 export async function GET(req) {
     const requestId = req.headers.get('x-request-id') || crypto.randomUUID();
     const { searchParams } = new URL(req.url);
@@ -204,10 +200,6 @@ export async function POST(req) {
 
         // 1. Save to Database
         const { data, error } = await createBooking(bookingData, businessId);
-        // Release the slot lock regardless of outcome
-        if (bookingData.booking_date && bookingData.booking_time) {
-            releaseSlotLock(bookingData.booking_date, bookingData.booking_time, businessId);
-        }
         if (error) {
             if (error.code === 'SLOT_TAKEN') {
                 return Response.json({ error: { ...error, request_id: requestId } }, { status: 409 });
