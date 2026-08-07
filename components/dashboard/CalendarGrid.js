@@ -11,17 +11,15 @@ export default function CalendarGrid() {
         setLoading(true);
         try {
             const response = await fetch(`/api/bookings?date=${date}`);
+            if (!response.ok) {
+                setSlots([]);
+                return;
+            }
             const data = await response.json();
-            // Assuming the existing /api/bookings returns availability if a date is provided
-            // If not, we'll need to update that route or use a dedicated one.
-            // For now, let's mock the live response structure based on our lib/calendar.js
-            setSlots(data.availability || [
-                { time: '8:00 AM', status: 'available' },
-                { time: '11:00 AM', status: 'available' },
-                { time: '2:00 PM', status: 'available' }
-            ]);
-        } catch (error) {
-            console.error("Failed to fetch slots:", error);
+            // Use real availability from the API, or empty array if none
+            setSlots(data.availability || []);
+        } catch {
+            setSlots([]);
         } finally {
             setLoading(false);
         }
@@ -47,6 +45,10 @@ export default function CalendarGrid() {
             <div className={styles.grid}>
                 {loading ? (
                     <div className={styles.loader}>Checking Calendar...</div>
+                ) : slots.length === 0 ? (
+                    <div className={styles.empty}>
+                        No availability data for this date. Connect your Google Calendar for real-time slots.
+                    </div>
                 ) : (
                     slots.map((slot, index) => (
                         <div

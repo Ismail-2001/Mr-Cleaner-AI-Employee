@@ -23,6 +23,7 @@ import * as Sentry from '@sentry/nextjs';
 import { verifyGoogleWebhook, parseGbpNotification, replyToReview, generateReviewReply, resolveBusinessByGbpLocation } from '@/lib/gbp';
 import { orchestrateMaya } from '@/lib/maestro';
 import { checkWebhookRateLimit } from '@/lib/rate-limit';
+import { log } from '@/lib/logger';
 
 // ─── POST: Notification Handler ──────────────────────────────────────────────
 
@@ -36,7 +37,7 @@ export async function POST(req) {
 
     const rateLimit = await checkWebhookRateLimit(ip);
     if (rateLimit) {
-        console.log(`[${requestId}] GBP webhook rate limited ip=${ip}`);
+        log.info('google-webhook', 'GBP webhook rate limited', { requestId, ip });
         return Response.json({ status: 'rate_limited' }, { status: 429 });
     }
 
@@ -59,18 +60,18 @@ export async function POST(req) {
 
         // Verify webhook authenticity
         if (!verifyGoogleWebhook(body)) {
-            console.warn(`[${requestId}] Invalid Google webhook from ip=${ip}`);
+            log.warn('google-webhook', 'Invalid Google webhook', { requestId, ip });
             return Response.json({ error: { code: 'FORBIDDEN', message: 'Invalid verification' } }, { status: 403 });
         }
 
         // Parse the notification
         const event = parseGbpNotification(body);
         if (!event) {
-            console.log(`[${requestId}] Unparseable GBP notification`);
+            log.info('google-webhook', 'Unparseable GBP notification', { requestId });
             return Response.json({ status: 'ok' });
         }
 
-        console.log(`[${requestId}] GBP event: ${event.type} from location ${event.locationId}`);
+        log.info('google-webhook', `GBP event: ${event.type} from location ${event.locationId}`, { requestId });
 
         // Resolve business from GBP location ID
         const businessId = await resolveBusinessByGbpLocation(event.locationId)
@@ -91,12 +92,12 @@ export async function POST(req) {
                 break;
 
             default:
-                console.log(`[${requestId}] Ignoring GBP event type: ${event.type}`);
+                log.info('google-webhook', `Ignoring GBP event type: ${event.type}`, { requestId });
         }
 
         return Response.json({ status: 'ok', event_type: event.type });
     } catch (error) {
-        console.error(`[${requestId}] GBP webhook critical error:`, error.message);
+        log.error('google-webhook', 'GBP webhook critical error', { requestId, error: error.message });
         Sentry.captureException(error, {
             tags: { module: 'gbp-webhook', code: 'CRITICAL', requestId },
         });
@@ -120,9 +121,9 @@ async function handleReview(event, businessId, requestId) {
             );
 
             if (replyResult.success) {
-                console.log(`[${requestId}] Auto-replied to review ${event.reviewId} (${event.starRating} stars)`);
+                log.info('google-webhook', `Auto-replied to review ${event.reviewId} (${event.starRating} stars)`, { requestId });
             } else {
-                console.error(`[${requestId}] Failed to reply to review:`, replyResult.error);
+                log.error('google-webhook', 'Failed to reply to review', { requestId, error: replyResult.error });
             }
         }
 
@@ -141,7 +142,7 @@ async function handleReview(event, businessId, requestId) {
             });
         }
     } catch (error) {
-        console.error(`[${requestId}] Review handler error:`, error.message);
+        log.error('google-webhook', 'Review handler error', { requestId, error: error.message });
     }
 }
 
@@ -160,9 +161,9 @@ async function handleQuestion(event, businessId, requestId) {
             businessId,
         });
 
-        console.log(`[${requestId}] Maya generated Q&A response for question ${event.questionId}`);
+        log.info('google-webhook', `Maya generated Q&A response for question ${event.questionId}`, { requestId });
     } catch (error) {
-        console.error(`[${requestId}] Q&A handler error:`, error.message);
+        log.error('google-webhook', 'Q&A handler error', { requestId, error: error.message });
     }
 }
 
@@ -181,9 +182,9 @@ async function handleMessage(event, businessId, requestId) {
             businessId,
         });
 
-        console.log(`[${requestId}] Maya processed GBP message from ${event.senderName}`);
+        log.info('google-webhook', `Maya processed GBP message from ${event.senderName}`, { requestId });
     } catch (error) {
-        console.error(`[${requestId}] Message handler error:`, error.message);
+        log.error('google-webhook', 'Message handler error', { requestId, error: error.message });
     }
 }
 

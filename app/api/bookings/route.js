@@ -8,6 +8,7 @@ import { checkBookingRateLimit } from '@/lib/rate-limit';
 import { redactBookingData } from '@/lib/pii-redact';
 import { resolveBusinessId } from '@/lib/tenant';
 import { tryRedisOp } from '@/lib/redis';
+import { log } from '@/lib/logger';
 
 /**
  * WHY THIS RE-VERIFICATION EXISTS:
@@ -50,7 +51,7 @@ async function isSlotStillAvailable(date, time, businessId) {
     const requestedMinutes = parseTimeToMinutes(time);
 
     if (requestedMinutes === null) {
-        console.warn(`Could not parse booking time "${time}" for availability check`);
+        log.warn('bookings', 'Could not parse booking time for availability check', { time });
         return false;
     }
 
@@ -80,7 +81,7 @@ async function acquireSlotLock(date, time, businessId) {
     if (redisResult === false) return false;
 
     // Redis unavailable — log warning, rely on DB constraint
-    console.warn(`Redis unavailable for slot lock — relying on DB unique constraint`);
+    log.warn('bookings', 'Redis unavailable for slot lock — relying on DB unique constraint');
     return true;
 }
 
@@ -89,16 +90,18 @@ function releaseSlotLock(date, time, businessId) {
 }
 
 export async function GET(req) {
-    const requestId = crypto.randomUUID();
+    const requestId = req.headers.get('x-request-id') || crypto.randomUUID();
     const { searchParams } = new URL(req.url);
     const date = searchParams.get('date');
 
     if (date) {
         try {
             const availability = await checkAvailability(date);
-            return Response.json({ availability });
+            return Response.json({ availability }, {
+                headers: { 'Cache-Control': 'public, max-age=60, stale-while-revalidate=120' },
+            });
         } catch (error) {
-            console.error(`[${requestId}] Availability check failed:`, error.message);
+            log.error('bookings', 'Availability check failed', { requestId, error: error.message });
             return Response.json(
                 { error: { code: 'AVAILABILITY_ERROR', message: 'Failed to check availability', request_id: requestId } },
                 { status: 500 }
@@ -113,7 +116,7 @@ export async function GET(req) {
 
         const { data, error } = await getBookings(businessId);
         if (error) {
-            console.error(`[${requestId}] Get bookings failed:`, error);
+            log.error('bookings', 'Get bookings failed', { requestId, error });
             return Response.json(
                 { error: { code: 'DB_ERROR', message: 'Failed to fetch bookings', request_id: requestId } },
                 { status: 500 }
@@ -130,7 +133,7 @@ export async function GET(req) {
             headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60' },
         });
     } catch (error) {
-        console.error(`[${requestId}] GET /api/bookings error:`, error.message);
+        log.error('bookings', 'GET /api/bookings error', { requestId, error: error.message });
         return Response.json(
             { error: { code: 'INTERNAL_ERROR', message: 'Internal server error', request_id: requestId } },
             { status: 500 }
@@ -139,14 +142,14 @@ export async function GET(req) {
 }
 
 export async function POST(req) {
-    const requestId = crypto.randomUUID();
+    const requestId = req.headers.get('x-request-id') || crypto.randomUUID();
 
     // RATE LIMITING: 5 booking attempts per minute per IP.
     // Prevents spam bookings that burn Twilio SMS credits and flood the calendar.
     const ip = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown';
     const rateLimit = await checkBookingRateLimit(ip);
     if (rateLimit) {
-        console.log(`[${requestId}] Booking rate limited ip=${ip}`);
+        log.info('bookings', 'Booking rate limited', { requestId, ip });
         return Response.json(
             { error: { code: 'RATE_LIMITED', message: `Too many requests. Try again in ${rateLimit.retryAfterSec}s.`, request_id: requestId } },
             { status: 429, headers: { 'Retry-After': String(rateLimit.retryAfterSec) } }
@@ -159,12 +162,12 @@ export async function POST(req) {
         const body = await req.json();
         const validation = validateBody(BookingRequestSchema, body);
         if (!validation.success) {
-            console.log(`[${requestId}] Booking validation failed`);
+            log.info('bookings', 'Booking validation failed', { requestId });
             return validation.response;
         }
         const bookingData = validation.data;
         // PII REDACTION: Never log raw customer data
-        console.log(`[${requestId}] Creating booking:`, redactBookingData(bookingData));
+        log.info('bookings', 'Creating booking', { requestId, booking: redactBookingData(bookingData) });
 
         // MULTI-TENANT: Resolve which business this booking belongs to.
         const businessId = await resolveBusinessId(req);
@@ -180,7 +183,7 @@ export async function POST(req) {
                 businessId
             );
             if (!lockAcquired) {
-                console.log(`[${requestId}] Slot lock contended:`, bookingData.booking_date, bookingData.booking_time);
+                log.info('bookings', 'Slot lock contended', { requestId, date: bookingData.booking_date, time: bookingData.booking_time });
                 return Response.json({
                     error: { code: 'SLOT_TAKEN', message: 'This time slot is being booked by another customer. Please select a different time.', request_id: requestId }
                 }, { status: 409 });
@@ -192,7 +195,7 @@ export async function POST(req) {
                 businessId
             );
             if (!stillAvailable) {
-                console.log(`[${requestId}] Pre-check slot taken:`, bookingData.booking_date, bookingData.booking_time);
+                log.info('bookings', 'Pre-check slot taken', { requestId, date: bookingData.booking_date, time: bookingData.booking_time });
                 return Response.json({
                     error: { code: 'SLOT_TAKEN', message: 'This time slot was just booked by another customer. Please select a different time.', request_id: requestId }
                 }, { status: 409 });
@@ -209,7 +212,7 @@ export async function POST(req) {
             if (error.code === 'SLOT_TAKEN') {
                 return Response.json({ error: { ...error, request_id: requestId } }, { status: 409 });
             }
-            console.error(`[${requestId}] DB Error:`, error);
+            log.error('bookings', 'DB Error', { requestId, error });
             return Response.json(
                 { error: { code: 'BOOKING_CREATE_FAILED', message: 'Failed to save booking', request_id: requestId } },
                 { status: 500 }
@@ -220,20 +223,20 @@ export async function POST(req) {
         try {
             await createCalendarEvent(bookingData);
         } catch (calError) {
-            console.error(`[${requestId}] Calendar event failed (non-fatal):`, calError.message);
+            log.error('bookings', 'Calendar event failed (non-fatal)', { requestId, error: calError.message });
         }
 
         // 3. Trigger Expert Dual Alerts
         try {
             await triggerLeadAlerts(bookingData);
         } catch (smsError) {
-            console.error(`[${requestId}] SMS alert failed (non-fatal):`, smsError.message);
+            log.error('bookings', 'SMS alert failed (non-fatal)', { requestId, error: smsError.message });
         }
 
-        console.log(`[${requestId}] Booking created successfully:`, data?.id);
+        log.info('bookings', 'Booking created successfully', { requestId, bookingId: data?.id });
         return Response.json(data);
     } catch (error) {
-        console.error(`[${requestId}] POST /api/bookings error:`, error.message);
+        log.error('bookings', 'POST /api/bookings error', { requestId, error: error.message });
         return Response.json(
             { error: { code: 'INTERNAL_ERROR', message: 'Internal server error', request_id: requestId } },
             { status: 500 }

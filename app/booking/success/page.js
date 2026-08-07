@@ -1,14 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense } from 'react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 
-export default function BookingSuccess() {
-    const [sessionId, setSessionId] = useState(null);
-
-    useEffect(() => {
-        const params = new URLSearchParams(window.location.search);
-        setSessionId(params.get('session_id'));
-    }, []);
+function BookingSuccessContent() {
+    const searchParams = useSearchParams();
+    const sessionId = searchParams.get('session_id');
 
     return (
         <main style={{
@@ -109,7 +107,7 @@ export default function BookingSuccess() {
                     </ul>
                 </div>
 
-                <a href="/" style={{
+                <Link href="/" style={{
                     display: 'inline-block',
                     padding: '14px 40px',
                     borderRadius: '12px',
@@ -124,8 +122,16 @@ export default function BookingSuccess() {
                     onMouseLeave={(e) => e.target.style.opacity = '1'}
                 >
                     Back to Home
-                </a>
+                </Link>
             </div>
         </main>
+    );
+}
+
+export default function BookingSuccess() {
+    return (
+        <Suspense fallback={null}>
+            <BookingSuccessContent />
+        </Suspense>
     );
 }

@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 export default function BookingCancel() {
     return (
         <main style={{
@@ -53,7 +55,7 @@ export default function BookingCancel() {
                     justifyContent: 'center',
                     flexWrap: 'wrap',
                 }}>
-                    <a href="/" style={{
+                    <Link href="/" style={{
                         display: 'inline-block',
                         padding: '14px 40px',
                         borderRadius: '12px',
@@ -68,7 +70,7 @@ export default function BookingCancel() {
                         onMouseLeave={(e) => e.target.style.opacity = '1'}
                     >
                         Back to Home
-                    </a>
+                    </Link>
                 </div>
             </div>
         </main>

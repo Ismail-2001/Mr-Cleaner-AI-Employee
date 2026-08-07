@@ -15,11 +15,26 @@ vi.mock('@/lib/lemon-squeezy', () => ({
     createCheckout: vi.fn(),
 }));
 
-vi.mock('@/lib/supabase-admin', () => ({
-    supabaseAdmin: null,
-}));
+vi.mock('@/lib/supabase-admin', () => {
+    const mockSelect = vi.fn().mockReturnThis();
+    const mockEq = vi.fn().mockReturnThis();
+    const mockSingle = vi.fn();
+    const mockUpdate = vi.fn().mockReturnThis();
+    return {
+        supabaseAdmin: {
+            from: vi.fn(() => ({
+                select: mockSelect,
+                eq: mockEq,
+                single: mockSingle,
+                update: mockUpdate,
+            })),
+            _mocks: { mockSelect, mockEq, mockSingle, mockUpdate },
+        },
+    };
+});
 
 import { executeTool } from '@/lib/tools';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 
 const VALID_SERVICES = ['Executive Preservation', 'The Master Detail', 'Signature Ceramic'];
 const VALID_VEHICLES = ['sedan', 'SUV', 'truck', 'large SUV'];
@@ -218,13 +233,13 @@ describe('sync_booking_state', () => {
 
 // ---- generate_deposit_link ----
 describe('generate_deposit_link', () => {
-    it('returns mock URL when no payment provider is configured', async () => {
+    it('returns error when no payment provider is configured (no mock URL)', async () => {
         const result = await executeTool('generate_deposit_link', { amount: 50, service: 'Executive Preservation' });
         const parsed = JSON.parse(result);
-        expect(parsed.payment_url).toContain('checkout.lemonsqueezy.com');
+        expect(parsed.error).toBeDefined();
+        expect(parsed.payment_url).toBeNull();
+        expect(parsed.provider).toBeNull();
         expect(parsed.deposit_amount).toBe(50);
-        expect(parsed.currency).toBe('USD');
-        expect(parsed.provider).toBe('mock');
     });
 
     it('rejects deposit below $1', async () => {
@@ -259,5 +274,90 @@ describe('get_availability', () => {
         checkAvailability.mockResolvedValue([]);
         const result = await executeTool('get_availability', { date: '2026-08-15', duration: 240 });
         expect(checkAvailability).toHaveBeenCalledWith('2026-08-15', 240);
+    });
+});
+
+// ---- check_loyalty_points ----
+describe('check_loyalty_points', () => {
+    const { mockSingle } = supabaseAdmin._mocks;
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockSingle.mockReset();
+    });
+
+    it('returns not_found when no loyalty account exists', async () => {
+        mockSingle.mockResolvedValue({ data: null, error: { message: 'Not found' } });
+        const result = await executeTool('check_loyalty_points', { phone: '+15551234567' });
+        const parsed = JSON.parse(result);
+        expect(parsed.status).toBe('not_found');
+    });
+
+    it('returns found with points and tier', async () => {
+        mockSingle
+            .mockResolvedValueOnce({ data: { total_points: 150, lifetime_points: 300, tier: 'Gold' }, error: null })
+            .mockResolvedValueOnce({ data: { redemption_rate: 0.01 }, error: null });
+        const result = await executeTool('check_loyalty_points', { phone: '+15551234567' });
+        const parsed = JSON.parse(result);
+        expect(parsed.status).toBe('found');
+        expect(parsed.points).toBe(150);
+        expect(parsed.tier).toBe('Gold');
+        expect(parsed.discount_value).toBe('1.50');
+    });
+});
+
+// ---- redeem_loyalty_points ----
+describe('redeem_loyalty_points', () => {
+    const { mockSingle, mockUpdate } = supabaseAdmin._mocks;
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockSingle.mockReset();
+        mockUpdate.mockReset();
+    });
+
+    it('returns error when no loyalty account exists', async () => {
+        mockSingle.mockResolvedValue({ data: null, error: { message: 'Not found' } });
+        const result = await executeTool('redeem_loyalty_points', { phone: '+15551234567', points: 100 });
+        const parsed = JSON.parse(result);
+        expect(parsed.status).toBe('error');
+    });
+
+    it('returns insufficient when points exceed balance', async () => {
+        mockSingle
+            .mockResolvedValueOnce({ data: { id: 'loy-1', total_points: 50, tier: 'Silver' }, error: null });
+        const result = await executeTool('redeem_loyalty_points', { phone: '+15551234567', points: 100 });
+        const parsed = JSON.parse(result);
+        expect(parsed.status).toBe('insufficient');
+        expect(parsed.available_points).toBe(50);
+    });
+
+    it('returns below_minimum when points < min_redemption', async () => {
+        mockSingle
+            .mockResolvedValueOnce({ data: { id: 'loy-1', total_points: 500, tier: 'Gold' }, error: null })
+            .mockResolvedValueOnce({ data: { min_redemption: 50, redemption_rate: 0.01 }, error: null });
+        const result = await executeTool('redeem_loyalty_points', { phone: '+15551234567', points: 10 });
+        const parsed = JSON.parse(result);
+        expect(parsed.status).toBe('below_minimum');
+    });
+
+    it('redeems points successfully', async () => {
+        mockSingle
+            .mockResolvedValueOnce({ data: { id: 'loy-1', total_points: 200, tier: 'Gold' }, error: null })
+            .mockResolvedValueOnce({ data: { min_redemption: 50, redemption_rate: 0.02 }, error: null });
+
+        // Build the chain: update().eq().gte().select().single()
+        const mockSingleResult = vi.fn().mockResolvedValue({ data: { total_points: 100 }, error: null });
+        const mockSelectChain = vi.fn().mockReturnValue({ single: mockSingleResult });
+        const mockGteChain = vi.fn().mockReturnValue({ select: mockSelectChain });
+        const mockEqChain = vi.fn().mockReturnValue({ gte: mockGteChain });
+        mockUpdate.mockReturnValue({ eq: mockEqChain });
+
+        const result = await executeTool('redeem_loyalty_points', { phone: '+15551234567', points: 100 });
+        const parsed = JSON.parse(result);
+        expect(parsed.status).toBe('redeemed');
+        expect(parsed.points_redeemed).toBe(100);
+        expect(parsed.discount_amount).toBe('2.00');
+        expect(parsed.remaining_points).toBe(100);
     });
 });

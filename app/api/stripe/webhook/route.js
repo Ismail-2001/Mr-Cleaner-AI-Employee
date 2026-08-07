@@ -3,6 +3,8 @@ import { stripe } from '@/lib/stripe';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { triggerLeadAlerts } from '@/lib/twilio';
 import { sendBookingConfirmation } from '@/lib/email';
+import { checkWebhookRateLimit } from '@/lib/rate-limit';
+import { log } from '@/lib/logger';
 
 /**
  * POST /api/stripe/webhook — Stripe webhook handler for payment confirmation.
@@ -16,8 +18,16 @@ import { sendBookingConfirmation } from '@/lib/email';
 export async function POST(req) {
     const requestId = crypto.randomUUID();
 
+    // RATE LIMIT: Prevent webhook flood abuse (even with valid signature)
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    const rateLimited = await checkWebhookRateLimit(ip);
+    if (rateLimited) {
+        log.warn('stripe-webhook', 'Rate limited', { requestId, ip });
+        return Response.json({ error: 'Rate limited' }, { status: 429 });
+    }
+
     if (!stripe) {
-        console.error(`[${requestId}] Stripe webhook received but STRIPE_SECRET_KEY not configured`);
+        log.error('stripe-webhook', 'Stripe webhook received but STRIPE_SECRET_KEY not configured', { requestId });
         return Response.json(
             { error: { code: 'STRIPE_NOT_CONFIGURED', message: 'Stripe not configured', request_id: requestId } },
             { status: 500 }
@@ -43,7 +53,7 @@ export async function POST(req) {
             process.env.STRIPE_WEBHOOK_SECRET
         );
     } catch (err) {
-        console.error(`[${requestId}] Webhook signature verification failed:`, err.message);
+        log.error('stripe-webhook', 'Webhook signature verification failed', { requestId, error: err.message });
         Sentry.captureException(err, { tags: { route: 'webhook', code: 'INVALID_SIGNATURE', requestId } });
         return Response.json(
             { error: { code: 'INVALID_SIGNATURE', message: 'Webhook signature verification failed', request_id: requestId } },
@@ -55,7 +65,8 @@ export async function POST(req) {
         const session = event.data.object;
         const metadata = session.metadata || {};
 
-        console.log(`[${requestId}] Payment confirmed:`, {
+        log.info('stripe-webhook', 'Payment confirmed', {
+            requestId,
             stripe_session_id: session.id,
             session_id: metadata.session_id,
             service: metadata.service,
@@ -78,7 +89,7 @@ export async function POST(req) {
                 .maybeSingle();
 
             if (existingBooking) {
-                console.log(`[${requestId}] Webhook already processed, skipping.`);
+                log.info('stripe-webhook', 'Webhook already processed, skipping', { requestId });
                 return Response.json({ received: true, duplicate: true });
             }
 
@@ -109,12 +120,11 @@ export async function POST(req) {
                 : null;
 
             if (servicePrice === null) {
-                console.warn(JSON.stringify({
+                log.warn('stripe-webhook', 'Booking created without a real price from chat session. Analytics will show null for this booking.', {
+                    requestId,
                     code: 'MISSING_REAL_PRICE',
                     session_id: metadata.session_id,
-                    detail: 'Booking created without a real price from chat session. Analytics will show null for this booking.',
-                    timestamp: new Date().toISOString()
-                }));
+                });
             }
 
             const { error: updateError } = await supabaseAdmin
@@ -126,7 +136,7 @@ export async function POST(req) {
                 .eq('session_id', metadata.session_id);
 
             if (updateError) {
-                console.error(`[${requestId}] Failed to update session after payment:`, updateError.message);
+                log.error('stripe-webhook', 'Failed to update session after payment', { requestId, error: updateError.message });
             }
 
             // Insert a booking record if we have enough data
@@ -150,35 +160,45 @@ export async function POST(req) {
 
                 if (bookingError) {
                     if (bookingError.code === '23505') {
-                        console.log(`[${requestId}] Booking already exists, skipping.`);
+                        log.info('stripe-webhook', 'Booking already exists, skipping', { requestId });
                         return Response.json({ received: true, duplicate: true });
                     }
-                    console.error(`[${requestId}] Failed to create booking:`, bookingError.message);
+                    log.error('stripe-webhook', 'Failed to create booking', { requestId, error: bookingError.message });
                 }
 
-                await triggerLeadAlerts({
-                    customer_name: metadata.customer_name,
-                    phone: metadata.phone,
-                    service: metadata.service,
-                    service_price: servicePrice,
-                    booking_date: metadata.booking_date,
-                    booking_time: metadata.booking_time,
-                    lead_score: 80,
-                    language: mergedCustomerData.language || 'en',
-                });
+                try {
+                    await triggerLeadAlerts({
+                        customer_name: metadata.customer_name,
+                        phone: metadata.phone,
+                        service: metadata.service,
+                        service_price: servicePrice,
+                        booking_date: metadata.booking_date,
+                        booking_time: metadata.booking_time,
+                        lead_score: 80,
+                        language: mergedCustomerData.language || 'en',
+                    });
+                } catch (alertErr) {
+                    log.error('stripe-webhook', 'triggerLeadAlerts failed (non-blocking)', { requestId, error: alertErr.message });
+                    Sentry.captureException(alertErr, { tags: { module: 'stripe-webhook', requestId, code: 'LEAD_ALERT_FAILED' } });
+                }
 
                 const customerEmail = session.customer_details?.email || mergedCustomerData.email;
                 if (customerEmail) {
-                    await sendBookingConfirmation({
-                        email: customerEmail,
-                        customerName: metadata.customer_name,
-                        service: metadata.service,
-                        servicePrice,
-                        bookingDate: metadata.booking_date,
-                        bookingTime: metadata.booking_time || '09:00',
-                        address: mergedCustomerData.address,
-                        language: mergedCustomerData.language || 'en',
-                    });
+                    try {
+                        await sendBookingConfirmation({
+                            email: customerEmail,
+                            customerName: metadata.customer_name,
+                            service: metadata.service,
+                            servicePrice,
+                            bookingDate: metadata.booking_date,
+                            bookingTime: metadata.booking_time || '09:00',
+                            address: mergedCustomerData.address,
+                            language: mergedCustomerData.language || 'en',
+                        });
+                    } catch (emailErr) {
+                        log.error('stripe-webhook', 'sendBookingConfirmation failed (non-blocking)', { requestId, error: emailErr.message });
+                        Sentry.captureException(emailErr, { tags: { module: 'stripe-webhook', requestId, code: 'CONFIRMATION_EMAIL_FAILED' } });
+                    }
                 }
             }
         }

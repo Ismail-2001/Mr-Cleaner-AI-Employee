@@ -28,6 +28,12 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Production build
+        run: npm run build
+        env:
+          DASHBOARD_SESSION_SECRET: ${{ secrets.DASHBOARD_SESSION_SECRET || 'ci-test-secret-for-testing-only-32ch' }}
+          NODE_ENV: production
+
       - name: Unit tests
         run: npm test
         env:

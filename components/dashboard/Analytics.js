@@ -18,11 +18,14 @@ export default function Analytics() {
     const [trend, setTrend] = useState({ revenue: { current: 0, previous: 0, change: 0 }, bookings: { current: 0, previous: 0, change: 0 } });
     const [repeatCustomers, setRepeatCustomers] = useState([]);
     const [totalUniqueCustomers, setTotalUniqueCustomers] = useState(0);
+    const [dateRange, setDateRange] = useState('30d');
+    const [loading, setLoading] = useState(false);
 
     useEffect(() => {
         const fetchData = async () => {
+            setLoading(true);
             try {
-                const res = await fetch('/api/dashboard/analytics');
+                const res = await fetch(`/api/dashboard/analytics?range=${dateRange}`);
                 if (!res.ok) return;
                 const json = await res.json();
                 setLogs(json.logs || []);
@@ -33,11 +36,13 @@ export default function Analytics() {
                 setTotalUniqueCustomers(json.totalUniqueCustomers || 0);
             } catch {
                 // Analytics unavailable - show empty state
+            } finally {
+                setLoading(false);
             }
         };
 
         fetchData();
-    }, []);
+    }, [dateRange]);
 
     const handleExportCSV = () => {
         window.open('/api/dashboard/analytics/export', '_blank');
@@ -45,6 +50,33 @@ export default function Analytics() {
 
     return (
         <div className={styles.container}>
+            {/* Date Range Selector */}
+            <div style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px',
+            }}>
+                <h2 style={{ margin: 0, fontSize: '1.1rem', color: 'rgba(255,255,255,0.8)' }}>Analytics Overview</h2>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                    {[
+                        { label: '7D', value: '7d' },
+                        { label: '30D', value: '30d' },
+                        { label: '90D', value: '90d' },
+                        { label: 'All', value: 'all' },
+                    ].map(({ label, value }) => (
+                        <button
+                            key={value}
+                            onClick={() => setDateRange(value)}
+                            style={{
+                                padding: '6px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)',
+                                background: dateRange === value ? 'rgba(212,175,55,0.2)' : 'transparent',
+                                color: dateRange === value ? 'var(--gold)' : 'rgba(255,255,255,0.4)',
+                                fontSize: '0.8rem', fontWeight: dateRange === value ? '600' : '400',
+                                cursor: 'pointer', transition: 'all 0.2s',
+                            }}
+                        >{label}</button>
+                    ))}
+                </div>
+            </div>
+
             {/* KPI Cards */}
             <div className={styles.kpiGrid}>
                 <div className={styles.kpiCard}>
@@ -111,7 +143,7 @@ export default function Analytics() {
                         <ResponsiveContainer width="100%" height={300}>
                             <LineChart data={data.revenueByDay}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#333" />
-                                <XAxis dataKey="day" stroke="#666" />
+                                <XAxis dataKey="date" stroke="#666" tickFormatter={(v) => v.slice(5)} />
                                 <YAxis stroke="#666" />
                                 <Tooltip contentStyle={{ backgroundColor: '#1C1C1E', border: '1px solid #333' }} />
                                 <Line type="monotone" dataKey="revenue" stroke="var(--gold)" strokeWidth={3} dot={{ fill: 'var(--gold)' }} />

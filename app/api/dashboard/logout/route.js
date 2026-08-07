@@ -1,5 +1,6 @@
 import { COOKIE_NAME } from '@/lib/session';
 import { revokeSession } from '@/lib/revocation';
+import { log } from '@/lib/logger';
 
 /**
  * POST /api/dashboard/logout — Clears the session cookie and revokes the JWT.
@@ -25,7 +26,7 @@ export async function POST(req) {
         await revokeSession(sessionId);
     }
 
-    console.log(`[${requestId}] Dashboard logout`);
+    log.info('dashboard-logout', 'Dashboard logout', { requestId });
 
     const isProduction = process.env.NODE_ENV === 'production';
     return Response.json(

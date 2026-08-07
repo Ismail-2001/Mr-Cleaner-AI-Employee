@@ -3,16 +3,26 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { triggerLeadAlerts } from '@/lib/twilio';
 import { sendBookingConfirmation } from '@/lib/email';
 import { verifyWebhookSignature } from '@/lib/lemon-squeezy';
+import { checkWebhookRateLimit } from '@/lib/rate-limit';
+import { log } from '@/lib/logger';
 
 export async function POST(req) {
     const requestId = crypto.randomUUID();
+
+    // RATE LIMIT: Prevent webhook flood abuse (even with valid signature)
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    const rateLimited = await checkWebhookRateLimit(ip);
+    if (rateLimited) {
+        log.warn('lemonsqueezy-webhook', 'Rate limited', { requestId, ip });
+        return Response.json({ error: 'Rate limited' }, { status: 429 });
+    }
 
     const rawBody = await req.text();
     const sig = req.headers.get('x-signature');
 
     const valid = await verifyWebhookSignature(rawBody, sig);
     if (!valid) {
-        console.error(`[${requestId}] LemonSqueezy webhook signature verification failed`);
+        log.error('lemonsqueezy-webhook', 'Webhook signature verification failed', { requestId });
         return Response.json(
             { error: { code: 'INVALID_SIGNATURE', message: 'Webhook signature verification failed', request_id: requestId } },
             { status: 400 }
@@ -37,7 +47,8 @@ export async function POST(req) {
         const custom = attributes.first_order_item?.product_options?.custom || event.meta?.custom_data || {};
         const orderId = order.id;
 
-        console.log(`[${requestId}] Payment confirmed:`, {
+        log.info('lemonsqueezy-webhook', 'Payment confirmed', {
+            requestId,
             ls_order_id: orderId,
             session_id: custom.session_id,
             service: custom.service,
@@ -53,7 +64,7 @@ export async function POST(req) {
                 .maybeSingle();
 
             if (existingBooking) {
-                console.log(`[${requestId}] Duplicate order webhook, skipping.`);
+                log.info('lemonsqueezy-webhook', 'Duplicate order webhook, skipping', { requestId });
                 return Response.json({ received: true, duplicate: true });
             }
 
@@ -75,12 +86,11 @@ export async function POST(req) {
             const servicePrice = (typeof realPrice === 'number' && realPrice > 0) ? realPrice : null;
 
             if (servicePrice === null) {
-                console.warn(JSON.stringify({
+                log.warn('lemonsqueezy-webhook', 'Booking created without a real price from chat session. Analytics will show null.', {
+                    requestId,
                     code: 'MISSING_REAL_PRICE',
                     session_id: custom.session_id,
-                    detail: 'Booking created without a real price from chat session. Analytics will show null.',
-                    timestamp: new Date().toISOString(),
-                }));
+                });
             }
 
             const { error: updateError } = await supabaseAdmin
@@ -92,7 +102,7 @@ export async function POST(req) {
                 .eq('session_id', custom.session_id);
 
             if (updateError) {
-                console.error(`[${requestId}] Failed to update session:`, updateError.message);
+                log.error('lemonsqueezy-webhook', 'Failed to update session', { requestId, error: updateError.message });
                 Sentry.captureException(updateError, { tags: { module: 'ls-webhook', requestId } });
             }
 
@@ -116,37 +126,47 @@ export async function POST(req) {
 
                 if (bookingError) {
                     if (bookingError.code === '23505') {
-                        console.log(`[${requestId}] Booking already exists, skipping.`);
+                        log.info('lemonsqueezy-webhook', 'Booking already exists, skipping', { requestId });
                         return Response.json({ received: true, duplicate: true });
                     }
-                    console.error(`[${requestId}] Failed to create booking:`, bookingError.message);
+                    log.error('lemonsqueezy-webhook', 'Failed to create booking', { requestId, error: bookingError.message });
                     Sentry.captureException(bookingError, { tags: { module: 'ls-webhook', requestId } });
                 }
 
                 const customerEmail = attributes.customer_email || mergedCustomerData.email;
 
-                await triggerLeadAlerts({
-                    customer_name: custom.customer_name,
-                    phone: custom.phone,
-                    service: custom.service,
-                    service_price: servicePrice,
-                    booking_date: custom.booking_date,
-                    booking_time: custom.booking_time,
-                    lead_score: 80,
-                    language: mergedCustomerData.language || 'en',
-                });
-
-                if (customerEmail) {
-                    await sendBookingConfirmation({
-                        email: customerEmail,
-                        customerName: custom.customer_name,
+                try {
+                    await triggerLeadAlerts({
+                        customer_name: custom.customer_name,
+                        phone: custom.phone,
                         service: custom.service,
-                        servicePrice,
-                        bookingDate: custom.booking_date,
-                        bookingTime: custom.booking_time || '09:00',
-                        address: mergedCustomerData.address,
+                        service_price: servicePrice,
+                        booking_date: custom.booking_date,
+                        booking_time: custom.booking_time,
+                        lead_score: 80,
                         language: mergedCustomerData.language || 'en',
                     });
+                } catch (alertErr) {
+                    log.error('lemonsqueezy-webhook', 'triggerLeadAlerts failed (non-blocking)', { requestId, error: alertErr.message });
+                    Sentry.captureException(alertErr, { tags: { module: 'ls-webhook', requestId, code: 'LEAD_ALERT_FAILED' } });
+                }
+
+                if (customerEmail) {
+                    try {
+                        await sendBookingConfirmation({
+                            email: customerEmail,
+                            customerName: custom.customer_name,
+                            service: custom.service,
+                            servicePrice,
+                            bookingDate: custom.booking_date,
+                            bookingTime: custom.booking_time || '09:00',
+                            address: mergedCustomerData.address,
+                            language: mergedCustomerData.language || 'en',
+                        });
+                    } catch (emailErr) {
+                        log.error('lemonsqueezy-webhook', 'sendBookingConfirmation failed (non-blocking)', { requestId, error: emailErr.message });
+                        Sentry.captureException(emailErr, { tags: { module: 'ls-webhook', requestId, code: 'CONFIRMATION_EMAIL_FAILED' } });
+                    }
                 }
             }
         }
@@ -154,7 +174,7 @@ export async function POST(req) {
 
     if (eventName === 'order_refunded') {
         const orderId = event.data.id;
-        console.log(`[${requestId}] Order refunded: ${orderId}`);
+        log.info('lemonsqueezy-webhook', `Order refunded: ${orderId}`, { requestId });
 
         if (supabaseAdmin) {
             const { data: booking } = await supabaseAdmin
@@ -173,7 +193,7 @@ export async function POST(req) {
                     .eq('id', booking.id);
 
                 if (updateError) {
-                    console.error(`[${requestId}] Failed to update booking refund status:`, updateError.message);
+                    log.error('lemonsqueezy-webhook', 'Failed to update booking refund status', { requestId, error: updateError.message });
                     Sentry.captureException(updateError, { tags: { module: 'ls-webhook-refund', requestId, orderId } });
                 }
             }

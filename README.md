@@ -10,7 +10,7 @@
 
 ![Version](https://img.shields.io/badge/version-1.0.0-blue?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)
-![Tests](https://img.shields.io/badge/tests-208%20passing-brightgreen?style=for-the-badge)
+![Tests](https://img.shields.io/badge/tests-243%20passing-brightgreen?style=for-the-badge)
 ![Build](https://img.shields.io/badge/build-30%20routes-success?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-20.x-339933?style=for-the-badge&logo=node.js&logoColor=white)
 ![Next.js](https://img.shields.io/badge/Next.js-16-black?style=for-the-badge&logo=next.js&logoColor=white)
@@ -250,28 +250,62 @@ npm install
 ### 2. Configure Environment
 
 ```bash
-cp .env.local.example .env.local
+cp .env.example .env.local
 ```
 
 Edit `.env.local` with your API keys:
 
 ```env
-# Required
-GEMINI_API_KEY=your_gemini_key
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
-SUPABASE_SERVICE_ROLE_KEY=your_service_key
+# Required — Core
+DASHBOARD_PASSWORD=your_password
+DASHBOARD_SESSION_SECRET=your_session_secret_64_chars
+ADMIN_API_SECRET=your_admin_secret_64_chars
+NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_xxx
+SUPABASE_SERVICE_ROLE_KEY=sb_secret_xxx
 
-# Optional (but recommended)
+# Required — Payment (LemonSqueezy)
+LEMONSQUEEZY_API_KEY=your_ls_key
+LEMONSQUEEZY_STORE_ID=your_store_id
+LEMONSQUEEZY_VARIANT_ID=your_variant_id
+LEMONSQUEEZY_WEBHOOK_SECRET=your_webhook_secret
+
+# Required — Business Info
+BUSINESS_NAME=Your Business Name
+BUSINESS_PHONE=+1XXXXXXXXXX
+BUSINESS_EMAIL=you@business.com
+BUSINESS_LOCATION=City, State
+BUSINESS_TIMEZONE=America/Chicago
+
+# Required — AI (at least one)
+GEMINI_API_KEY=your_gemini_key
+
+# Optional — Security
+ENCRYPTION_KEY=your_64_char_hex_key
+CRON_SECRET=your_cron_secret
+
+# Optional — Payments (fallback)
 STRIPE_SECRET_KEY=your_stripe_key
-STRIPE_WEBHOOK_SECRET=your_webhook_secret
+STRIPE_WEBHOOK_SECRET=your_stripe_webhook_secret
+
+# Optional — Communications
 TWILIO_ACCOUNT_SID=your_twilio_sid
 TWILIO_AUTH_TOKEN=your_twilio_token
 TWILIO_PHONE_NUMBER=+15550001234
+RESEND_API_KEY=your_resend_key
+
+# Optional — Integrations
 GOOGLE_CALENDAR_CLIENT_ID=your_client_id
 GOOGLE_CALENDAR_CLIENT_SECRET=your_client_secret
-DASHBOARD_PASSWORD=your_dashboard_password
-DASHBOARD_SESSION_SECRET=your_session_secret
+META_ACCESS_TOKEN=your_meta_token
+WHATSAPP_PHONE_NUMBER_ID=your_wa_phone_id
+WHATSAPP_BUSINESS_ACCOUNT_ID=your_wa_biz_id
+
+# Optional — Infrastructure
+UPSTASH_REDIS_REST_URL=your_redis_url
+UPSTASH_REDIS_REST_TOKEN=your_redis_token
+USE_REDIS=true
+QSTASH_TOKEN=your_qstash_token
 ```
 
 ### 3. Initialize Database
@@ -323,13 +357,15 @@ Or connect your GitHub repo to Vercel for auto-deploys on every push.
 │
 ├── lib/                          # Core business logic
 │   ├── maestro.js                # Maya orchestration engine
-│   ├── ai-agent.js               # System prompt + language detection
-│   ├── tools.js                  # 12 tool functions (quote, calendar, etc.)
+│   ├── ai-agent.js               # System prompt + LOCALES registry
+│   ├── tools.js                  # 14 tool functions (quote, calendar, loyalty, etc.)
+│   ├── output-validator.js       # LLM response validation (Zod schema)
+│   ├── logger.js                 # Structured JSON logger
 │   ├── calendar.js               # Google Calendar integration
 │   ├── stripe.js                 # Stripe payment processing
 │   ├── twilio.js                 # SMS with retry + fallback
 │   ├── email.js                  # Bilingual email templates
-│   ├── meta.js                   # Meta Messenger + Instagram
+│   ├── meta.js                   # Meta Messenger + Instagram + WhatsApp
 │   ├── gbp.js                    # Google Business Profile
 │   ├── jobber.js                 # Jobber CRM integration
 │   ├── redis.js                  # Shared Redis client
@@ -337,10 +373,14 @@ Or connect your GitHub repo to Vercel for auto-deploys on every push.
 │   ├── session.js                # JWT session management
 │   ├── tenant.js                 # Multi-tenant business resolution
 │   ├── supabase.js               # Database operations
+│   ├── supabase-admin.js         # Singleton Supabase client
 │   ├── photo-upload.js           # Vehicle photo processing
 │   ├── refund.js                 # Stripe refund logic
 │   ├── pii-redact.js             # PII scrubbing for logs
-│   └── csrf.js                   # CSRF token generation
+│   ├── csrf.js                   # CSRF token generation
+│   ├── circuit-breaker.js        # LLM provider circuit breaker
+│   ├── validate-env.js           # Startup env validation (production fail-closed)
+│   └── validate-request.js       # Zod request validation
 │
 ├── components/                   # React components
 │   ├── ChatInterface.js          # AI chat widget
@@ -352,13 +392,17 @@ Or connect your GitHub repo to Vercel for auto-deploys on every push.
 │   ├── Navbar.js                 # Scroll-aware navigation
 │   └── dashboard/                # Dashboard components
 │
-├── tests/                        # 208 automated tests
-│   ├── maestro.test.js           # Orchestration engine
-│   ├── tools.test.js             # Tool execution
-│   ├── tenant.test.js            # Multi-tenant isolation
-│   ├── rate-limit.test.js        # Rate limiting
-│   ├── i18n.test.js              # Bilingual support
-│   └── ...                       # 17 test files total
+├── tests/                        # 243 automated tests
+│   ├── maestro.test.js           # Orchestration engine (24 tests)
+│   ├── tools.test.js             # Tool execution (30 tests)
+│   ├── tenant.test.js            # Multi-tenant isolation (9 tests)
+│   ├── rate-limit.test.js        # Rate limiting (17 tests)
+│   ├── i18n.test.js              # Bilingual support (15 tests)
+│   ├── output-validator.test.js  # LLM output validation (12 tests)
+│   ├── csrf.test.js              # CSRF protection (13 tests)
+│   ├── circuit-breaker.test.js   # Circuit breaker (9 tests)
+│   ├── integration-real.test.js  # Live Supabase (gated)
+│   └── ...                       # 12 more test files
 │
 ├── e2e/                          # Playwright E2E tests
 │   ├── booking-flow.spec.ts      # Critical booking path
@@ -367,7 +411,9 @@ Or connect your GitHub repo to Vercel for auto-deploys on every push.
 ├── supabase/                     # Database schemas
 │   ├── schema.sql                # Base schema
 │   ├── multi-tenancy-migration.sql
-│   └── vehicle-photos-migration.sql
+│   ├── vehicle-photos-migration.sql
+│   ├── 0004_whatsapp_integration.sql
+│   └── 0005_loyalty_program.sql
 │
 ├── STAGING.md                    # Staging environment setup
 ├── SECURITY_CHANGELOG.md         # Audit trail
@@ -381,8 +427,11 @@ Or connect your GitHub repo to Vercel for auto-deploys on every push.
 | Method | Endpoint | Description |
 |---|---|---|
 | `POST` | `/api/chat` | Maya chat — main entry point |
+| `POST` | `/api/v1/chat` | Maya chat — versioned route |
 | `POST` | `/api/bookings` | Create booking |
 | `GET` | `/api/bookings` | List bookings (authenticated) |
+| `POST` | `/api/v1/bookings` | Create booking — versioned route |
+| `GET` | `/api/v1/bookings` | List bookings — versioned route |
 | `GET` | `/api/calendar/availability` | Check available slots |
 | `POST` | `/api/stripe/webhook` | Stripe payment events |
 | `POST` | `/api/webhook/meta` | Meta Messenger webhook |
@@ -392,10 +441,14 @@ Or connect your GitHub repo to Vercel for auto-deploys on every push.
 | `GET` | `/api/dashboard/analytics` | Analytics with trends |
 | `GET` | `/api/dashboard/analytics/export` | CSV export |
 | `POST` | `/api/dashboard/refund` | Process refund |
+| `PUT` | `/api/dashboard/settings` | Update business settings (auth required) |
 | `POST` | `/api/cron/daily-summary` | Daily owner summary |
 | `POST` | `/api/integrations/jobber/*` | Jobber CRM sync |
-| `POST` | `/api/upload` | Vehicle photo upload |
-| `GET` | `/api/health` | System health check |
+| `POST` | `/api/upload` | Vehicle photo upload (auth required) |
+| `POST` | `/api/v1/upload` | Vehicle photo upload — versioned route |
+| `GET` | `/api/health` | System health check (uptime, version, env) |
+| `GET` | `/api/v1/health` | Health check — versioned route |
+| `POST` | `/api/admin/rate-limit/reset` | Reset rate limits (ADMIN_API_SECRET required) |
 
 ---
 
@@ -486,24 +539,28 @@ npm run test:watch
 npm run test:coverage
 ```
 
-**208 tests** across 17 files covering:
-- Tool execution (24 tests)
-- Rate limiting (21 tests)
+**243 tests** across 21 files covering:
+- Tool execution (30 tests)
+- Maestro orchestration (24 tests)
+- Rate limiting (17 tests)
 - API validation (16 tests)
+- Meta webhooks (16 tests)
 - Photo upload (15 tests)
 - Internationalization (15 tests)
-- Orchestration engine (14 tests)
 - CSRF protection (13 tests)
+- Output validation (12 tests)
 - Error reporting (12 tests)
-- Meta webhooks (12 tests)
-- Twilio SMS (11 tests)
 - Integrations (11 tests)
-- Booking concurrency (9 tests)
-- Refunds (8 tests)
-- Tenant isolation (8 tests)
+- Twilio SMS (11 tests)
+- Refunds (10 tests)
+- Tenant isolation (9 tests)
+- Circuit breaker (9 tests)
 - Sessions (7 tests)
+- Booking concurrency (2 tests)
+- Runtime resilience (4 tests)
+- Webhook revenue integrity (4 tests)
 - Environment validation (5 tests)
-- Webhooks (5 tests)
+- Integration (live Supabase, gated by INTEGRATION_TESTS=true) (1 test)
 
 ### E2E Tests (Playwright)
 
@@ -524,12 +581,15 @@ Tests critical user flows:
 
 ## Deployment
 
+See [DEPLOY.md](./DEPLOY.md) for complete production deployment checklist.
+
 ### Vercel (Recommended)
 
 1. Push to GitHub
 2. Connect repo to Vercel
-3. Set environment variables
-4. Deploy — zero config needed
+3. Set environment variables (see DEPLOY.md for full list)
+4. Run SQL migrations in Supabase
+5. Deploy — zero config needed
 
 ### Manual Deployment
 
@@ -592,14 +652,14 @@ See [STAGING.md](./STAGING.md) for:
 
 ## Roadmap
 
-### Phase 1 (Current) — Core Booking Agent
+### Phase 1 (Complete) — Core Booking Agent
 - [x] AI chat with tool calling
 - [x] Google Calendar sync
 - [x] Stripe deposit collection
 - [x] Twilio SMS alerts
 - [x] Owner dashboard with analytics
 
-### Phase 2 (In Progress) — Production Hardening
+### Phase 2 (Complete) — Production Hardening
 - [x] Multi-tenant data model
 - [x] Bilingual support (EN/ES)
 - [x] Rate limiting + security
@@ -609,10 +669,22 @@ See [STAGING.md](./STAGING.md) for:
 - [x] Vehicle photo uploads
 - [x] Staging environment
 
-### Phase 3 (Planned) — Scale
-- [ ] Multi-language expansion (French, Vietnamese)
-- [ ] WhatsApp Business integration
-- [ ] Customer loyalty program
+### Phase 3 (Complete) — Scale
+- [x] Multi-language support (EN/ES, data-driven locale registry)
+- [x] WhatsApp Business integration
+- [x] Customer loyalty program
+- [x] LLM output validation (Zod schema)
+- [x] Integration tests (live Supabase)
+- [x] Structured logging (JSON across 37 files)
+- [x] Request ID propagation
+- [x] API versioning (/api/v1/*)
+- [x] Health check hardening (uptime, response time, version)
+- [x] Environment validation (production fail-closed)
+- [x] Compression + cache headers
+- [x] 8 security fixes (auth, CSRF, TOCTOU, rate-limit secrets)
+
+### Phase 4 (Planned) — Growth
+- [ ] Multi-language expansion (French, Vietnamese — add to LOCALES registry)
 - [ ] Advanced analytics (ML-based demand forecasting)
 - [ ] White-label deployment portal
 - [ ] Mobile app for owners

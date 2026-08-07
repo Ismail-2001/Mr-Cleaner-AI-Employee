@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import styles from './BookingsTable.module.css';
-import { RefreshCw, RotateCcw, X, AlertTriangle, CheckCircle } from 'lucide-react';
+import { RefreshCw, RotateCcw, X, AlertTriangle, CheckCircle, Plus } from 'lucide-react';
 
 function ConfirmModal({ booking, onConfirm, onCancel, loading }) {
     if (!booking) return null;
@@ -140,15 +140,201 @@ function Toast({ message, type, onClose }) {
     );
 }
 
+function BookingDetailModal({ booking, onClose }) {
+    if (!booking) return null;
+
+    const getStatusColor = (status) => {
+        switch (status?.toLowerCase()) {
+            case 'confirmed': return '#30D158';
+            case 'pending': return '#FF9F0A';
+            case 'cancelled': return '#FF453A';
+            case 'refunded': return '#8E8E93';
+            default: return '#666';
+        }
+    };
+
+    const detailRows = [
+        { label: 'Customer', value: booking.customer_name || 'N/A' },
+        { label: 'Phone', value: booking.phone || 'N/A' },
+        { label: 'Email', value: booking.email || 'N/A' },
+        { label: 'Service', value: booking.service },
+        { label: 'Vehicle', value: booking.vehicle_type || 'N/A' },
+        { label: 'Date', value: booking.booking_date || 'N/A' },
+        { label: 'Time', value: booking.booking_time || 'N/A' },
+        { label: 'Price', value: booking.service_price ? `$${booking.service_price}` : 'N/A' },
+        { label: 'Status', value: booking.status, color: getStatusColor(booking.status) },
+        { label: 'Address', value: booking.address || 'N/A' },
+        { label: 'Notes', value: booking.notes || 'None' },
+        { label: 'Created', value: booking.created_at ? new Date(booking.created_at).toLocaleString() : 'N/A' },
+    ];
+
+    return (
+        <div style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 1000, padding: '20px',
+        }} onClick={onClose}>
+            <div style={{
+                background: '#1a1d23', border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: '16px', padding: '32px', maxWidth: '520px', width: '100%',
+                maxHeight: '80vh', overflow: 'auto',
+            }} onClick={e => e.stopPropagation()}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                    <h3 style={{ color: '#fff', margin: 0 }}>Booking Details</h3>
+                    <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer' }}>
+                        <X size={20} />
+                    </button>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {detailRows.map(({ label, value, color }) => (
+                        <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                            <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.85rem' }}>{label}</span>
+                            <span style={{ color: color || '#fff', fontSize: '0.85rem', fontWeight: color ? '600' : '400', textTransform: label === 'Status' ? 'capitalize' : 'none' }}>
+                                {value}
+                            </span>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function CreateBookingModal({ onClose, onCreated }) {
+    const [form, setForm] = useState({
+        customer_name: '', phone: '', service: '', vehicle_type: '',
+        booking_date: '', booking_time: '', address: '',
+    });
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+
+    const updateField = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
+
+    const handleSubmit = async () => {
+        if (!form.customer_name || !form.service || !form.booking_date || !form.booking_time) {
+            setError('Name, service, date, and time are required.');
+            return;
+        }
+        setLoading(true);
+        setError('');
+        try {
+            const res = await fetch('/api/bookings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(form),
+            });
+            if (res.ok) {
+                onCreated();
+                onClose();
+            } else {
+                const data = await res.json();
+                setError(data.error?.message || 'Failed to create booking.');
+            }
+        } catch {
+            setError('Network error.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const inputStyle = {
+        background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+        borderRadius: '8px', padding: '10px 12px', color: '#fff', fontSize: '0.9rem',
+        width: '100%', boxSizing: 'border-box',
+    };
+
+    return (
+        <div style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 1000, padding: '20px',
+        }} onClick={onClose}>
+            <div style={{
+                background: '#1a1d23', border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: '16px', padding: '32px', maxWidth: '480px', width: '100%',
+            }} onClick={e => e.stopPropagation()}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                    <h3 style={{ color: '#fff', margin: 0 }}>Create Booking</h3>
+                    <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer' }}>
+                        <X size={20} />
+                    </button>
+                </div>
+                {error && (
+                    <div style={{ background: 'rgba(255,69,58,0.1)', border: '1px solid rgba(255,69,58,0.3)', borderRadius: '8px', padding: '10px', marginBottom: '16px', color: '#FF453A', fontSize: '0.85rem' }}>
+                        {error}
+                    </div>
+                )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <input placeholder="Customer name *" value={form.customer_name} onChange={e => updateField('customer_name', e.target.value)} style={inputStyle} />
+                    <input placeholder="Phone" value={form.phone} onChange={e => updateField('phone', e.target.value)} style={inputStyle} />
+                    <input placeholder="Service *" value={form.service} onChange={e => updateField('service', e.target.value)} style={inputStyle} />
+                    <input placeholder="Vehicle type" value={form.vehicle_type} onChange={e => updateField('vehicle_type', e.target.value)} style={inputStyle} />
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                        <input type="date" value={form.booking_date} onChange={e => updateField('booking_date', e.target.value)} style={inputStyle} />
+                        <input type="time" value={form.booking_time} onChange={e => updateField('booking_time', e.target.value)} style={inputStyle} />
+                    </div>
+                    <input placeholder="Address" value={form.address} onChange={e => updateField('address', e.target.value)} style={inputStyle} />
+                </div>
+                <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
+                    <button onClick={onClose} style={{
+                        flex: 1, padding: '12px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)',
+                        background: 'transparent', color: 'rgba(255,255,255,0.6)', fontSize: '0.9rem', cursor: 'pointer',
+                    }}>Cancel</button>
+                    <button onClick={handleSubmit} disabled={loading} style={{
+                        flex: 1, padding: '12px', borderRadius: '10px', border: 'none',
+                        background: loading ? 'rgba(48,209,88,0.3)' : '#30D158', color: '#fff',
+                        fontSize: '0.9rem', fontWeight: '600', cursor: loading ? 'not-allowed' : 'pointer',
+                    }}>{loading ? 'Creating...' : 'Create Booking'}</button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+const PAGE_SIZE = 10;
+
 export default function BookingsTable({ bookings = [] }) {
     const [filter, setFilter] = useState('all');
+    const [search, setSearch] = useState('');
+    const [page, setPage] = useState(1);
     const [refunding, setRefunding] = useState(null);
     const [refundLoading, setRefundLoading] = useState(false);
     const [toast, setToast] = useState(null);
+    const [selectedBooking, setSelectedBooking] = useState(null);
+    const [showCreateModal, setShowCreateModal] = useState(false);
 
-    const filteredBookings = filter === 'all'
-        ? bookings
-        : bookings.filter(b => b.status?.toLowerCase() === filter);
+    // Filter + search
+    const filteredBookings = bookings
+        .filter(b => filter === 'all' || b.status?.toLowerCase() === filter)
+        .filter(b => {
+            if (!search.trim()) return true;
+            const q = search.toLowerCase();
+            return (
+                (b.customer_name || '').toLowerCase().includes(q) ||
+                (b.phone || '').toLowerCase().includes(q) ||
+                (b.service || '').toLowerCase().includes(q) ||
+                (b.vehicle_type || '').toLowerCase().includes(q)
+            );
+        });
+
+    // Pagination
+    const totalPages = Math.max(1, Math.ceil(filteredBookings.length / PAGE_SIZE));
+    const safePage = Math.min(page, totalPages);
+    const paginatedBookings = filteredBookings.slice(
+        (safePage - 1) * PAGE_SIZE,
+        safePage * PAGE_SIZE
+    );
+
+    // Reset page when filter or search changes
+    const handleFilterChange = (newFilter) => {
+        setFilter(newFilter);
+        setPage(1);
+    };
+
+    const handleSearchChange = (e) => {
+        setSearch(e.target.value);
+        setPage(1);
+    };
 
     const getStatusColor = (status) => {
         switch (status?.toLowerCase()) {
@@ -199,13 +385,31 @@ export default function BookingsTable({ bookings = [] }) {
             <div className={styles.header}>
                 <h2>Recent Elite Reservations</h2>
                 <div className={styles.filters}>
-                    <select className={styles.filterSelect} value={filter} onChange={(e) => setFilter(e.target.value)}>
+                    <input
+                        type="text"
+                        placeholder="Search name, phone, service..."
+                        value={search}
+                        onChange={handleSearchChange}
+                        className={styles.searchInput}
+                    />
+                    <select className={styles.filterSelect} value={filter} onChange={(e) => handleFilterChange(e.target.value)}>
                         <option value="all">All Availability</option>
                         <option value="pending">Pending Approval</option>
                         <option value="confirmed">Confirmed Elite</option>
                         <option value="refunded">Refunded</option>
                         <option value="cancelled">Cancelled</option>
                     </select>
+                    <button
+                        onClick={() => setShowCreateModal(true)}
+                        style={{
+                            display: 'flex', alignItems: 'center', gap: '6px',
+                            padding: '8px 14px', borderRadius: '8px', border: 'none',
+                            background: '#30D158', color: '#fff', fontSize: '0.85rem',
+                            fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap',
+                        }}
+                    >
+                        <Plus size={14} /> New Booking
+                    </button>
                 </div>
             </div>
 
@@ -222,8 +426,8 @@ export default function BookingsTable({ bookings = [] }) {
                     </tr>
                 </thead>
                 <tbody>
-                    {filteredBookings.map((booking) => (
-                        <tr key={booking.id}>
+                    {paginatedBookings.map((booking) => (
+                        <tr key={booking.id} onClick={() => setSelectedBooking(booking)} style={{ cursor: 'pointer' }}>
                             <td>
                                 <div className={styles.customerInfo}>
                                     <strong>{booking.customer_name || 'Inquiry'}</strong>
@@ -270,12 +474,62 @@ export default function BookingsTable({ bookings = [] }) {
                     {filteredBookings.length === 0 && (
                         <tr>
                             <td colSpan="7" style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
-                                No bookings found. Try booking one with Maya!
+                                {search ? 'No bookings match your search.' : 'No bookings found. Try booking one with Maya!'}
                             </td>
                         </tr>
                     )}
                 </tbody>
             </table>
+
+            {totalPages > 1 && (
+                <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '16px 0',
+                    color: 'rgba(255,255,255,0.5)',
+                    fontSize: '0.85rem',
+                }}>
+                    <span>
+                        Showing {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filteredBookings.length)} of {filteredBookings.length}
+                    </span>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                            onClick={() => setPage(p => Math.max(1, p - 1))}
+                            disabled={safePage <= 1}
+                            style={{
+                                padding: '6px 12px',
+                                borderRadius: '6px',
+                                border: '1px solid rgba(255,255,255,0.1)',
+                                background: 'transparent',
+                                color: safePage <= 1 ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.7)',
+                                cursor: safePage <= 1 ? 'not-allowed' : 'pointer',
+                                fontSize: '0.85rem',
+                            }}
+                        >
+                            Prev
+                        </button>
+                        <span style={{ padding: '6px 12px', color: 'rgba(255,255,255,0.7)' }}>
+                            {safePage} / {totalPages}
+                        </span>
+                        <button
+                            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                            disabled={safePage >= totalPages}
+                            style={{
+                                padding: '6px 12px',
+                                borderRadius: '6px',
+                                border: '1px solid rgba(255,255,255,0.1)',
+                                background: 'transparent',
+                                color: safePage >= totalPages ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.7)',
+                                cursor: safePage >= totalPages ? 'not-allowed' : 'pointer',
+                                fontSize: '0.85rem',
+                            }}
+                        >
+                            Next
+                        </button>
+                    </div>
+                </div>
+            )}
 
             <ConfirmModal
                 booking={refunding}
@@ -283,6 +537,14 @@ export default function BookingsTable({ bookings = [] }) {
                 onCancel={() => !refundLoading && setRefunding(null)}
                 loading={refundLoading}
             />
+
+            <BookingDetailModal booking={selectedBooking} onClose={() => setSelectedBooking(null)} />
+            {showCreateModal && (
+                <CreateBookingModal
+                    onClose={() => setShowCreateModal(false)}
+                    onCreated={() => window.location.reload()}
+                />
+            )}
 
             {toast && (
                 <Toast

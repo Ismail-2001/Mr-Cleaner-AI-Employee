@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
+import Image from 'next/image';
 import styles from './BeforeAfterSlider.module.css';
 
 export default function BeforeAfterSlider({ beforeSrc, afterSrc, beforeAlt = 'Before', afterAlt = 'After' }) {
@@ -47,12 +48,26 @@ export default function BeforeAfterSlider({ beforeSrc, afterSrc, beforeAlt = 'Be
             onMouseLeave={handleMouseUp}
         >
             <div className={styles.imageContainer}>
-                <img src={afterSrc} alt={afterAlt} className={styles.image} draggable={false} />
+                <Image
+                    src={afterSrc}
+                    alt={afterAlt}
+                    fill
+                    sizes="(max-width: 800px) 100vw, 800px"
+                    className={styles.image}
+                    draggable={false}
+                />
                 <div
                     className={styles.beforeContainer}
                     style={{ width: `${sliderPosition}%` }}
                 >
-                    <img src={beforeSrc} alt={beforeAlt} className={styles.image} draggable={false} />
+                    <Image
+                        src={beforeSrc}
+                        alt={beforeAlt}
+                        fill
+                        sizes="(max-width: 800px) 100vw, 800px"
+                        className={styles.image}
+                        draggable={false}
+                    />
                 </div>
                 <div
                     className={styles.slider}

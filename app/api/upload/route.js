@@ -13,11 +13,15 @@
  *   - Magic byte validation (not just Content-Type header)
  *   - Session ID validation (alphanumeric + dash/underscore, max 100)
  *   - Rate limited: 5 uploads/min per IP
+ *   - Session ID must match active chat session
  */
 
 import crypto from 'crypto';
 import { processAndUploadPhoto, detectImageMime } from '@/lib/photo-upload';
 import { checkBookingRateLimit } from '@/lib/rate-limit';
+import { supabaseAdmin } from '@/lib/supabase-admin';
+import { resolveBusinessId } from '@/lib/tenant';
+import { log } from '@/lib/logger';
 
 export async function POST(req) {
     const requestId = crypto.randomUUID();
@@ -61,6 +65,25 @@ export async function POST(req) {
             ? sessionId
             : 'anonymous';
 
+        // Validate session exists in usage_logs (prevents arbitrary session_id injection)
+        if (safeSessionId !== 'anonymous' && supabaseAdmin) {
+            const { data: sessionRow } = await supabaseAdmin
+                .from('usage_logs')
+                .select('id')
+                .eq('session_id', safeSessionId)
+                .limit(1)
+                .maybeSingle();
+            if (!sessionRow) {
+                return Response.json(
+                    { error: { code: 'INVALID_SESSION', message: 'Session not found' } },
+                    { status: 400 }
+                );
+            }
+        }
+
+        // Resolve business for multi-tenant scoping
+        const businessId = await resolveBusinessId(req);
+
         // Read file as buffer
         const buffer = Buffer.from(await file.arrayBuffer());
 
@@ -87,6 +110,7 @@ export async function POST(req) {
             buffer,
             detectedMime,
             safeSessionId,
+            businessId,
         );
 
         if (!result.success) {
@@ -96,7 +120,7 @@ export async function POST(req) {
             );
         }
 
-        console.log(`[${requestId}] Photo uploaded: ${result.path} (${result.width}x${result.height}, ${result.sizeBytes} bytes)`);
+        log.info('upload', 'Photo uploaded', { requestId, path: result.path, width: result.width, height: result.height, sizeBytes: result.sizeBytes });
 
         return Response.json({
             url: result.url,
@@ -106,7 +130,7 @@ export async function POST(req) {
             sizeBytes: result.sizeBytes,
         });
     } catch (error) {
-        console.error(`[${requestId}] Upload error:`, error.message);
+        log.error('upload', 'Upload error', { requestId, error: error.message });
         return Response.json(
             { error: { code: 'UPLOAD_FAILED', message: 'Failed to upload photo. Please try again.' } },
             { status: 500 }

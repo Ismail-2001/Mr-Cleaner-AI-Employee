@@ -1,192 +1,334 @@
-# Vercel Deployment — Step by Step Guide
+# Production Deployment Guide
 
-## Step 1: Create Vercel Account
-
-1. Go to **https://vercel.com**
-2. Click **"Sign Up"**
-3. Sign up with **GitHub** (same as Supabase)
-4. Authorize Vercel to access your repos
+*Expert engineering checklist for deploying Maya AI Concierge to production.*
 
 ---
 
-## Step 2: Install Vercel CLI
+## Prerequisites
 
-Open terminal and run:
+- [ ] Node.js 20.x installed
+- [ ] Vercel account ([vercel.com](https://vercel.com))
+- [ ] Supabase project ([supabase.com](https://supabase.com))
+- [ ] Gemini API key ([aistudio.google.com](https://aistudio.google.com))
+- [ ] GitHub repo connected to Vercel
+
+---
+
+## Step 1: Generate Secrets
+
+Run these locally to generate secure random values:
 
 ```bash
+# Admin API secret (for rate-limit reset endpoint)
+node -e "console.log(crypto.randomBytes(32).toString('hex'))"
+
+# Dashboard session secret (JWT signing key)
+node -e "console.log(crypto.randomBytes(32).toString('hex'))"
+
+# Cron secret (health check + daily summary auth)
+node -e "console.log(crypto.randomBytes(32).toString('hex'))"
+```
+
+Save these values — you'll need them in Step 4.
+
+---
+
+## Step 2: Initialize Database
+
+In Supabase SQL Editor, run all migrations in order:
+
+```sql
+-- 1. Base schema
+\i supabase/schema.sql
+
+-- 2. Multi-tenancy
+\i supabase/multi-tenancy-migration.sql
+
+-- 3. Vehicle photos
+\i supabase/vehicle-photos-migration.sql
+
+-- 4. WhatsApp fields
+\i supabase/0004_whatsapp_integration.sql
+
+-- 5. Loyalty program
+\i supabase/0005_loyalty_program.sql
+```
+
+Or paste each file's contents directly into the SQL Editor.
+
+**Verify:** Run `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public';` — you should see `bookings`, `customers`, `usage_logs`, `loyalty_accounts`, `loyalty_transactions`, and others.
+
+---
+
+## Step 3: Deploy to Vercel
+
+```bash
+# Install Vercel CLI (if not already)
 npm install -g vercel
-```
 
----
-
-## Step 3: Login to Vercel
-
-```bash
+# Login
 vercel login
+
+# Deploy to production
+vercel --prod
 ```
 
-Enter your email when prompted. Check email for verification link.
-
----
-
-## Step 4: Deploy
-
-From your project folder:
-
-```bash
-cd Mobile-Detailing-AI-Agent-main
-vercel
-```
-
-### You'll be prompted:
-
+When prompted:
 ```
 ? Set up and deploy? → Y
 ? Which scope? → Select your account
-? Link to existing project? → N
+? Link to existing project? → N (first time) or Y (re-deploy)
 ? Project name? → mr-cleaner
 ? Directory is empty? → N
 ? Override settings? → N
 ```
 
-Wait 1-2 minutes for build.
+Note the deployment URL (e.g., `https://mr-cleaner-xyz.vercel.app`).
 
 ---
 
-## Step 5: Add Environment Variables
+## Step 4: Set Environment Variables
 
-1. Go to **https://vercel.com/dashboard**
-2. Click on your **mr-cleaner** project
-3. Go to **Settings** tab
-4. Click **"Environment Variables"**
-5. Add these variables:
+In Vercel dashboard → Settings → Environment Variables, add:
 
-### Required (Copy from .env.local):
+### Required (copy from your `.env.local`)
 
-| Name | Value |
-|------|-------|
-| `GEMINI_API_KEY` | Your Gemini API key |
-| `NEXT_PUBLIC_SUPABASE_URL` | Your Supabase project URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Your Supabase anon key |
-| `SUPABASE_SERVICE_ROLE_KEY` | Your Supabase service role key |
-| `DASHBOARD_PASSWORD` | A strong password |
-| `DASHBOARD_SESSION_SECRET` | Random 32+ char string |
-| `NEXT_PUBLIC_APP_URL` | Your Vercel URL (see Step 6) |
+| Variable | Value | Notes |
+|----------|-------|-------|
+| `DASHBOARD_PASSWORD` | Your chosen password | Used to log into `/dashboard` |
+| `DASHBOARD_SESSION_SECRET` | 64-char hex string | Generated in Step 1 |
+| `ADMIN_API_SECRET` | 64-char hex string | Generated in Step 1 — separate from session secret |
+| `CRON_SECRET` | 64-char hex string | Generated in Step 1 — for health check + cron auth |
+| `NEXT_PUBLIC_SUPABASE_URL` | `https://xxx.supabase.co` | From Supabase dashboard → Settings → API |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `sb_publishable_xxx` | From Supabase dashboard → Settings → API |
+| `SUPABASE_SERVICE_ROLE_KEY` | `sb_secret_xxx` | From Supabase dashboard → Settings → API (never expose to client) |
+| `GEMINI_API_KEY` | `AQ.Ab8RN6...` | From aistudio.google.com |
+| `NEXT_PUBLIC_APP_URL` | `https://mr-cleaner-xyz.vercel.app` | Your Vercel deployment URL |
+| `NODE_ENV` | `production` | Enables strict env validation + security headers |
 
-### Optional:
+### Payment (LemonSqueezy — primary)
 
-| Name | Value |
-|------|-------|
-| `GOOGLE_CALENDAR_CLIENT_ID` | From Google Cloud Console |
-| `GOOGLE_CALENDAR_CLIENT_SECRET` | From Google Cloud Console |
-| `TWILIO_ACCOUNT_SID` | From Twilio |
-| `TWILIO_AUTH_TOKEN` | From Twilio |
-| `TWILIO_PHONE_NUMBER` | Your Twilio number |
+| Variable | Value |
+|----------|-------|
+| `LEMONSQUEEZY_API_KEY` | From LemonSqueezy dashboard → Settings → API |
+| `LEMONSQUEEZY_STORE_ID` | Your store ID |
+| `LEMONSQUEEZY_VARIANT_ID` | Your variant ID |
+| `LEMONSQUEEZY_WEBHOOK_SECRET` | From LemonSqueezy webhook settings |
 
-6. Click **"Save"** for each variable
+### Business Info (required for chat prompt + responses)
+
+| Variable | Value |
+|----------|-------|
+| `BUSINESS_NAME` | Your business name |
+| `BUSINESS_PHONE` | Your business phone (+1XXXXXXXXXX) |
+| `BUSINESS_EMAIL` | Your business email |
+| `BUSINESS_LOCATION` | City, State |
+| `BUSINESS_TIMEZONE` | `America/Chicago` (or your timezone) |
+
+### Security
+
+| Variable | Value |
+|----------|-------|
+| `ENCRYPTION_KEY` | 64-char hex string — for PII at rest |
+
+**Click "Save" after each variable.**
 
 ---
 
-## Step 6: Get Your Live URL
+## Step 5: Redeploy
 
-1. Go to your project in Vercel dashboard
-2. You'll see a URL like:
-   ```
-   https://mr-cleaner-xyz.vercel.app
-   ```
-3. Copy this URL
-4. Update `NEXT_PUBLIC_APP_URL` environment variable with this URL
-5. Redeploy (see Step 7)
-
----
-
-## Step 7: Redeploy with Env Vars
+After setting all env vars:
 
 ```bash
 vercel --prod
 ```
 
-Or click **"Redeploy"** in Vercel dashboard.
+Or click "Redeploy" in Vercel dashboard. This ensures the new env vars are picked up.
 
 ---
 
-## Step 8: Verify Deployment
+## Step 6: Verify Deployment
 
-1. Open your Vercel URL
-2. Check the landing page loads
-3. Click "Book Now" — chat with Maya
-4. Go to `/dashboard` — login with your password
-5. Check Supabase — bookings should appear
+### 6a. Health Check
+
+```bash
+curl https://mr-cleaner-xyz.vercel.app/api/health
+```
+
+Expected response:
+```json
+{
+  "status": "ok",
+  "uptime_sec": 12345,
+  "response_time_ms": 45,
+  "version": "1.0.0",
+  "env": "production"
+}
+```
+
+### 6b. Chat Test
+
+```bash
+curl -X POST https://mr-cleaner-xyz.vercel.app/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Hi, I need a ceramic coating quote", "session_id": "test-001"}'
+```
+
+Expected: JSON with Maya's response (not simulation mode).
+
+### 6c. Dashboard
+
+Open `https://mr-cleaner-xyz.vercel.app/dashboard` in browser.
+- Login with your `DASHBOARD_PASSWORD`
+- Verify bookings table loads
+- Verify analytics section shows data
+
+### 6d. Versioned API
+
+```bash
+curl https://mr-cleaner-xyz.vercel.app/api/v1/health
+```
+
+Should return same health response.
 
 ---
 
-## Custom Domain (Optional)
+## Step 7: Configure Webhooks
 
-1. In Vercel dashboard, go to **Settings** → **Domains**
+After deployment, set up webhooks for each integration:
+
+### LemonSqueezy Webhook
+- URL: `https://mr-cleaner-xyz.vercel.app/api/lemonsqueezy/webhook`
+- Events: `order_created`, `order_updated`
+
+### Stripe Webhook (if using Stripe fallback)
+- URL: `https://mr-cleaner-xyz.vercel.app/api/webhook/stripe`
+- Events: `checkout.session.completed`, `charge.refunded`
+
+### Meta Messenger Webhook (if using Messenger/Instagram)
+- URL: `https://mr-cleaner-xyz.vercel.app/api/webhook/meta`
+- Verify Token: Your `META_WEBHOOK_VERIFY_TOKEN`
+
+### Jobber Webhook (if using Jobber CRM)
+- URL: `https://mr-cleaner-xyz.vercel.app/api/integrations/jobber`
+
+### Google Business Profile (if using GBP)
+- URL: `https://mr-cleaner-xyz.vercel.app/api/webhook/google`
+
+### QStash (if using async processing)
+- Set `QSTASH_TOKEN` in Vercel env vars
+- Update Upstash dashboard with webhook URLs
+
+---
+
+## Step 8: Custom Domain (Optional)
+
+1. Vercel → Settings → Domains → Add Domain
 2. Enter your domain (e.g., `mrcleaner.com`)
-3. Follow DNS instructions from Vercel
-4. Wait for SSL certificate (automatic)
+3. Follow Vercel's DNS instructions:
+   - Add CNAME record pointing to `cname.vercel-dns.com`
+   - Or add A record pointing to `76.76.21.21`
+4. Wait for SSL certificate (automatic, ~2 min)
+5. Update `NEXT_PUBLIC_APP_URL` to `https://mrcleaner.com`
+6. Redeploy
+
+---
+
+## Step 9: Post-Deploy Monitoring
+
+### Uptime Monitoring
+
+Set up [UptimeRobot](https://uptimerobot.com) (free):
+- Monitor URL: `https://mr-cleaner-xyz.vercel.app/api/health`
+- Check interval: 5 minutes
+- Alert via email + SMS
+
+### Error Tracking
+
+Sentry is already integrated. To enable:
+1. Create account at [sentry.io](https://sentry.io)
+2. Create new Next.js project
+3. Copy DSN to env var `SENTRY_DSN`
+4. Redeploy
+
+### Log Monitoring
+
+- Vercel dashboard → Deployments → Functions → Logs
+- Supabase dashboard → Logs → Postgres
+
+---
+
+## Optional Integrations
+
+Add these after core deployment is verified:
+
+### Twilio (SMS Notifications)
+```
+TWILIO_ACCOUNT_SID=ACxxxxx
+TWILIO_AUTH_TOKEN=your_auth_token
+TWILIO_PHONE_NUMBER=+1507xxxxxxx
+```
+
+### Google Calendar (Booking Sync)
+```
+GOOGLE_CALENDAR_CLIENT_ID=xxxxx.apps.googleusercontent.com
+GOOGLE_CALENDAR_CLIENT_SECRET=GOCSPX-xxxxx
+GOOGLE_CALENDAR_REDIRECT_URI=https://mr-cleaner-xyz.vercel.app/api/auth/callback/google
+```
+
+### Resend (Email Fallback)
+```
+RESEND_API_KEY=re_xxxxx
+```
+
+### OpenWeather (Weather Forecasts)
+```
+OPENWEATHER_API_KEY=xxxxx
+```
+
+### WhatsApp Business
+```
+META_ACCESS_TOKEN=EAAxxxxx
+WHATSAPP_PHONE_NUMBER_ID=xxxxx
+WHATSAPP_BUSINESS_ACCOUNT_ID=xxxxx
+```
+
+### Upstash Redis (Production Rate Limiting)
+```
+UPSTASH_REDIS_REST_URL=https://xxx.upstash.io
+UPSTASH_REDIS_REST_TOKEN=xxxxx
+USE_REDIS=true
+```
 
 ---
 
 ## Troubleshooting
 
-### "Function has timed out"
-- Gemini API is slow
-- Check if GEMINI_API_KEY is correct
-
-### "Module not found"
-- Dependencies not installed
-- Run `npm install` locally, then redeploy
-
-### Dashboard shows "Server configuration error"
-- DASHBOARD_PASSWORD or DASHBOARD_SESSION_SECRET not set
-- Add them in Vercel environment variables
-
-### Chat returns mock responses
-- GEMINI_API_KEY not set
-- Check environment variables in Vercel
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `500 Function has timed out` | Gemini API slow | Check `GEMINI_API_KEY`, retry |
+| `Module not found` | Deps not installed | Run `npm install` locally, redeploy |
+| `Server configuration error` | Missing env vars | Check Vercel env vars |
+| `Simulation mode` response | No AI keys set | Add `GEMINI_API_KEY` |
+| `401 Unauthorized` on dashboard | Wrong password or missing `DASHBOARD_SESSION_SECRET` | Verify both are set |
+| `Rate limit exceeded` | Redis not configured | Set `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN`, set `USE_REDIS=true` |
+| Health check returns 503 | DB connection failing | Check `SUPABASE_SERVICE_ROLE_KEY` |
 
 ---
 
-## Auto-Deploy from GitHub
+## Deployment Checklist Summary
 
-Vercel auto-deploys when you push to GitHub:
-
-```bash
-# Make changes locally
-git add -A
-git commit -m "feat: new feature"
-git push origin main
+```
+□ Step 1: Generate 3 secrets (ADMIN_API_SECRET, DASHBOARD_SESSION_SECRET, CRON_SECRET)
+□ Step 2: Run all 5 SQL migrations in Supabase
+□ Step 3: Deploy to Vercel with `vercel --prod`
+□ Step 4: Set 20+ env vars in Vercel dashboard
+□ Step 5: Redeploy to pick up env vars
+□ Step 6: Verify health check, chat, dashboard, versioned API
+□ Step 7: Configure webhooks for each integration
+□ Step 8: (Optional) Add custom domain
+□ Step 9: Set up uptime monitoring + Sentry
+□ Step 10: (Optional) Add Twilio, Google Calendar, Redis, WhatsApp
 ```
 
-Vercel will automatically rebuild and deploy.
-
----
-
-## Cost
-
-**Vercel Free Tier includes:**
-- 100 GB bandwidth/month
-- 100 hours of serverless functions
-- Automatic SSL
-- Custom domains
-
-**For a demo site, free tier is more than enough.**
-
----
-
-## Summary
-
-| Step | Time | What |
-|------|------|------|
-| 1 | 2 min | Create Vercel account |
-| 2 | 1 min | Install CLI |
-| 3 | 1 min | Login |
-| 4 | 2 min | Deploy |
-| 5 | 5 min | Add env vars |
-| 6 | 1 min | Get URL |
-| 7 | 2 min | Redeploy |
-| 8 | 2 min | Verify |
-
-**Total: ~15 minutes to live**
+**Estimated time: 30-45 minutes for core deployment, +15 min per optional integration.**

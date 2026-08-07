@@ -11,16 +11,22 @@
 
 import * as Sentry from '@sentry/nextjs';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { log } from '@/lib/logger';
 
 export async function POST(req) {
     const requestId = crypto.randomUUID();
 
     try {
         const qstashSigningKey = process.env.QSTASH_SIGNING_KEY;
-        if (qstashSigningKey) {
+        if (!qstashSigningKey) {
+            if (process.env.NODE_ENV === 'production') {
+                log.error('jobber-process', 'QSTASH_SIGNING_KEY not configured — rejecting in production', { requestId });
+                return Response.json({ error: 'Server misconfigured' }, { status: 500 });
+            }
+        } else {
             const signature = req.headers.get('upstash-signature');
             if (!signature) {
-                console.warn(`[${requestId}] Missing QStash signature`);
+                log.warn('jobber-process', 'Missing QStash signature', { requestId });
                 return Response.json({ error: 'Missing signature' }, { status: 403 });
             }
             try {
@@ -28,11 +34,11 @@ export async function POST(req) {
                 const rawBody = await req.text();
                 const isValid = await verify({ body: rawBody, signature, signingKey: qstashSigningKey });
                 if (!isValid) {
-                    console.warn(`[${requestId}] Invalid QStash signature`);
+                    log.warn('jobber-process', 'Invalid QStash signature', { requestId });
                     return Response.json({ error: 'Invalid signature' }, { status: 403 });
                 }
             } catch (verifyErr) {
-                console.error(`[${requestId}] QStash verification error:`, verifyErr.message);
+                log.error('jobber-process', 'QStash verification error', { requestId, error: verifyErr.message });
                 return Response.json({ error: 'Verification failed' }, { status: 403 });
             }
         }
@@ -44,7 +50,7 @@ export async function POST(req) {
             return Response.json({ status: 'ok', processed: 0 });
         }
 
-        console.log(`[${requestId}] QStash: processing Jobber event ${event.type} from ${originalRequestId}`);
+        log.info('jobber-process', 'QStash: processing Jobber event', { requestId, eventType: event.type, originalRequestId });
 
         // Process job updates
         if (event.type === 'job_update' && event.jobId && supabaseAdmin) {
@@ -69,18 +75,18 @@ export async function POST(req) {
                         .update({ status: ourStatus })
                         .eq('id', integration.id);
 
-                    console.log(`[${requestId}] Synced Jobber job ${event.jobId} → booking status: ${ourStatus}`);
+                    log.info('jobber-process', 'Synced Jobber job to booking status', { requestId, jobId: event.jobId, status: ourStatus });
                 }
             }
         }
 
         if (event.type === 'invoice_update') {
-            console.log(`[${requestId}] Jobber invoice ${event.invoiceId}: ${event.status}`);
+            log.info('jobber-process', 'Jobber invoice update', { requestId, invoiceId: event.invoiceId, status: event.status });
         }
 
         return Response.json({ status: 'ok', processed: 1 });
     } catch (error) {
-        console.error(`[${requestId}] QStash Jobber process error:`, error.message);
+        log.error('jobber-process', 'QStash Jobber process error', { requestId, error: error.message });
         Sentry.captureException(error, { tags: { module: 'jobber-qstash-process', requestId } });
         return Response.json({ status: 'error', message: error.message }, { status: 500 });
     }

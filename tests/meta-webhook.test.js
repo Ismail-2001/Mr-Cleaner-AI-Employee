@@ -22,7 +22,9 @@ vi.mock('@/lib/meta', () => ({
     handleWebhookVerification: vi.fn(),
     parseWebhookMessages: vi.fn(),
     sendMetaMessage: vi.fn().mockResolvedValue({ success: true }),
+    sendWhatsAppMessage: vi.fn().mockResolvedValue({ success: true }),
     resolveBusinessByMetaId: vi.fn().mockResolvedValue(null),
+    resolveBusinessByWhatsAppId: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock('@/lib/rate-limit', () => ({
@@ -215,5 +217,96 @@ describe('Meta Webhook — GET Handler (Verification)', () => {
 
         expect(response.status).toBe(200);
         expect(handleWebhookVerification).toHaveBeenCalled();
+    });
+});
+
+describe('WhatsApp — Message Parsing', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('parses WhatsApp messages correctly', async () => {
+        const { parseWebhookMessages } = await import('@/lib/meta');
+
+        const whatsappMessages = [
+            { senderId: '+15551234567', recipientId: 'phone-id-1', text: 'Hello from WhatsApp', platform: 'whatsapp', messageId: 'wamid.123' },
+        ];
+        parseWebhookMessages.mockReturnValueOnce(whatsappMessages);
+
+        const result = parseWebhookMessages({
+            object: 'whatsapp_business_account',
+            entry: [{
+                changes: [{
+                    value: {
+                        metadata: { phone_number_id: 'phone-id-1' },
+                        messages: [{ from: '+15551234567', text: { body: 'Hello from WhatsApp' }, id: 'wamid.123' }],
+                    },
+                }],
+            }],
+        });
+
+        expect(result).toHaveLength(1);
+        expect(result[0].platform).toBe('whatsapp');
+        expect(result[0].senderId).toBe('+15551234567');
+        expect(result[0].text).toBe('Hello from WhatsApp');
+    });
+
+    it('returns empty array for WhatsApp status events', async () => {
+        const { parseWebhookMessages } = await import('@/lib/meta');
+        parseWebhookMessages.mockReturnValueOnce([]);
+
+        const result = parseWebhookMessages({
+            object: 'whatsapp_business_account',
+            entry: [{ changes: [{ value: { statuses: [{ status: 'sent' }] } }] }],
+        });
+
+        expect(result).toHaveLength(0);
+    });
+});
+
+describe('WhatsApp — POST Handler', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    function createPostRequest(body, headers = {}) {
+        return new Request('https://example.com/api/webhook/meta', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', ...headers },
+            body: JSON.stringify(body),
+        });
+    }
+
+    it('accepts WhatsApp Business Account events', async () => {
+        const { verifyMetaSignature, parseWebhookMessages } = await import('@/lib/meta');
+        verifyMetaSignature.mockReturnValueOnce(true);
+        parseWebhookMessages.mockReturnValueOnce([]);
+
+        const { POST } = await import('@/app/api/webhook/meta/route');
+        const req = createPostRequest({ object: 'whatsapp_business_account', entry: [] });
+        const response = await POST(req);
+
+        expect(response.status).toBe(200);
+    });
+
+    it('processes WhatsApp messages via sendWhatsAppMessage', async () => {
+        const { verifyMetaSignature, parseWebhookMessages, sendWhatsAppMessage } = await import('@/lib/meta');
+        const { orchestrateMaya } = await import('@/lib/maestro');
+
+        verifyMetaSignature.mockReturnValueOnce(true);
+        parseWebhookMessages.mockReturnValueOnce([
+            { senderId: '+15559998888', recipientId: 'wa-phone-id', text: 'Book ceramic coating', platform: 'whatsapp', messageId: 'wamid.456' },
+        ]);
+        orchestrateMaya.mockResolvedValueOnce({ content: 'Ceramic coating is $350. Would you like to book?', session_id: 'wa_test' });
+        sendWhatsAppMessage.mockResolvedValueOnce({ success: true });
+
+        const { POST } = await import('@/app/api/webhook/meta/route');
+        const req = createPostRequest({ object: 'whatsapp_business_account', entry: [] });
+        const response = await POST(req);
+        const data = await response.json();
+
+        expect(response.status).toBe(200);
+        expect(data.processed).toBe(1);
+        expect(sendWhatsAppMessage).toHaveBeenCalledWith('+15559998888', 'Ceramic coating is $350. Would you like to book?', 'wa-phone-id');
     });
 });

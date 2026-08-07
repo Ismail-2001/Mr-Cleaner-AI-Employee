@@ -21,8 +21,10 @@ import styles from './Dashboard.module.css';
 export default function Dashboard() {
     const [activeTab, setActiveTab] = useState('bookings');
     const [bookings, setBookings] = useState([]);
+    const [analytics, setAnalytics] = useState(null);
     const [authError, setAuthError] = useState(false);
     const [status, setStatus] = useState({ supabase: 'checking', google: 'checking' });
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -43,6 +45,18 @@ export default function Dashboard() {
             }
         };
 
+        const fetchAnalytics = async () => {
+            try {
+                const res = await fetch('/api/dashboard/analytics');
+                if (res.ok) {
+                    const data = await res.json();
+                    setAnalytics(data);
+                }
+            } catch {
+                // Analytics unavailable — non-critical
+            }
+        };
+
         const checkStatus = async () => {
             try {
                 const res = await fetch('/api/health');
@@ -56,8 +70,7 @@ export default function Dashboard() {
             }
         };
 
-        fetchData();
-        checkStatus();
+        Promise.all([fetchData(), fetchAnalytics(), checkStatus()]).finally(() => setLoading(false));
     }, []);
 
     if (authError) {
@@ -82,48 +95,85 @@ export default function Dashboard() {
 
                 <ErrorBoundary>
                     <div className={styles.dashboardBody}>
-                        {activeTab === 'bookings' && (
-                            <>
-                                <StatCards bookings={bookings} />
-                                <div className={styles.container}>
-                                    <BookingsTable bookings={bookings} />
+                        {loading ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                                {/* Stat cards skeleton */}
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+                                    {[1, 2, 3, 4].map(i => (
+                                        <div key={i} style={{
+                                            background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)',
+                                            borderRadius: '12px', padding: '20px',
+                                        }}>
+                                            <div style={{ width: '40%', height: '12px', background: 'rgba(255,255,255,0.06)', borderRadius: '4px', marginBottom: '12px' }} />
+                                            <div style={{ width: '60%', height: '24px', background: 'rgba(255,255,255,0.06)', borderRadius: '4px', marginBottom: '8px' }} />
+                                            <div style={{ width: '50%', height: '10px', background: 'rgba(255,255,255,0.04)', borderRadius: '4px' }} />
+                                        </div>
+                                    ))}
                                 </div>
-                            </>
-                        )}
-                        {activeTab === 'analytics' && (
-                            <div className={styles.container}>
-                                <Analytics />
+                                {/* Table skeleton */}
+                                <div style={{
+                                    background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)',
+                                    borderRadius: '12px', padding: '24px',
+                                }}>
+                                    <div style={{ width: '200px', height: '20px', background: 'rgba(255,255,255,0.06)', borderRadius: '4px', marginBottom: '20px' }} />
+                                    {[1, 2, 3, 4, 5].map(i => (
+                                        <div key={i} style={{
+                                            display: 'grid', gridTemplateColumns: '2fr 1.5fr 1fr 1.5fr 1fr 1fr',
+                                            gap: '16px', padding: '12px 0', borderBottom: '1px solid rgba(255,255,255,0.04)',
+                                        }}>
+                                            {[1, 2, 3, 4, 5, 6].map(j => (
+                                                <div key={j} style={{ height: '14px', background: 'rgba(255,255,255,0.04)', borderRadius: '4px' }} />
+                                            ))}
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
-                        )}
-                        {activeTab === 'intelligence' && (
-                            <div className={styles.container}>
-                                <ReasoningLog />
-                            </div>
-                        )}
-                        {activeTab === 'settings' && (
-                            <div className={styles.container}>
-                                <Settings />
-                            </div>
-                        )}
-                        {activeTab === 'calendar' && (
-                            <div className={styles.container}>
-                                {status.google === 'connected' ? (
-                                    <CalendarGrid />
-                                ) : (
-                                    <div className={styles.placeholder}>
-                                        <h3>Calendar Sync</h3>
-                                        <p>Connect your business calendar to enable Maya to check your availability in real-time.</p>
-                                        <a
-                                            href="/api/auth/google"
-                                            className={styles.connectBtn}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                        >
-                                            Connect Google Calendar
-                                        </a>
+                        ) : (
+                            <>
+                                {activeTab === 'bookings' && (
+                                    <>
+                                        <StatCards bookings={bookings} analytics={analytics} />
+                                        <div className={styles.container}>
+                                            <BookingsTable bookings={bookings} />
+                                        </div>
+                                    </>
+                                )}
+                                {activeTab === 'analytics' && (
+                                    <div className={styles.container}>
+                                        <Analytics />
                                     </div>
                                 )}
-                            </div>
+                                {activeTab === 'intelligence' && (
+                                    <div className={styles.container}>
+                                        <ReasoningLog />
+                                    </div>
+                                )}
+                                {activeTab === 'settings' && (
+                                    <div className={styles.container}>
+                                        <Settings />
+                                    </div>
+                                )}
+                                {activeTab === 'calendar' && (
+                                    <div className={styles.container}>
+                                        {status.google === 'connected' ? (
+                                            <CalendarGrid />
+                                        ) : (
+                                            <div className={styles.placeholder}>
+                                                <h3>Calendar Sync</h3>
+                                                <p>Connect your business calendar to enable Maya to check your availability in real-time.</p>
+                                                <a
+                                                    href="/api/auth/google"
+                                                    className={styles.connectBtn}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                >
+                                                    Connect Google Calendar
+                                                </a>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </>
                         )}
                     </div>
                 </ErrorBoundary>

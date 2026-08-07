@@ -20,7 +20,8 @@
  */
 
 import * as Sentry from '@sentry/nextjs';
-import { verifyMetaSignature, handleWebhookVerification, parseWebhookMessages, sendMetaMessage } from '@/lib/meta';
+import { log } from '@/lib/logger';
+import { verifyMetaSignature, handleWebhookVerification, parseWebhookMessages, sendMetaMessage, sendWhatsAppMessage } from '@/lib/meta';
 import { orchestrateMaya } from '@/lib/maestro';
 import { resolveBusinessByMetaId } from '@/lib/meta';
 import { checkWebhookRateLimit } from '@/lib/rate-limit';
@@ -76,7 +77,7 @@ async function publishToQStash(payload) {
         });
         return true;
     } catch (err) {
-        console.warn('[meta-webhook] QStash publish failed, falling back to sync:', err.message);
+        log.warn('meta-webhook', 'QStash publish failed, falling back to sync', { error: err.message });
         return false;
     }
 }
@@ -99,7 +100,7 @@ export async function POST(req) {
 
     const rateLimit = await checkWebhookRateLimit(ip);
     if (rateLimit) {
-        console.log(`[${requestId}] Meta webhook rate limited ip=${ip}`);
+        log.info('webhook-meta', 'Meta webhook rate limited', { requestId, ip });
         return Response.json({ status: 'rate_limited' }, {
             status: 429,
             headers: { 'Retry-After': String(rateLimit.retryAfterSec) },
@@ -113,7 +114,7 @@ export async function POST(req) {
 
         // SIGNATURE VERIFICATION: Ensure request is from Meta
         if (!verifyMetaSignature(rawBody, signature)) {
-            console.warn(`[${requestId}] Invalid Meta webhook signature from ip=${ip}`);
+            log.warn('webhook-meta', 'Invalid Meta webhook signature', { requestId, ip });
             Sentry.captureMessage('Invalid Meta webhook signature', {
                 level: 'warning',
                 tags: { module: 'meta-webhook', requestId },
@@ -127,13 +128,14 @@ export async function POST(req) {
         try {
             body = JSON.parse(rawBody);
         } catch (e) {
-            console.error(`[${requestId}] Failed to parse webhook body:`, e.message);
+            log.error('webhook-meta', 'Failed to parse webhook body', { requestId, error: e.message });
             return Response.json({ status: 'error', message: 'Invalid JSON' }, { status: 400 });
         }
 
-        // Verify it's a page event
-        if (body.object !== 'page' && body.object !== 'instagram') {
-            console.log(`[${requestId}] Ignoring non-page event: ${body.object}`);
+        // Verify it's a supported Meta event (Messenger, Instagram, WhatsApp)
+        const supportedObjects = ['page', 'instagram', 'whatsapp_business_account'];
+        if (!supportedObjects.includes(body.object)) {
+            log.info('webhook-meta', 'Ignoring non-page event', { requestId, eventObject: body.object });
             return Response.json({ status: 'ok' });
         }
 
@@ -145,17 +147,17 @@ export async function POST(req) {
             return Response.json({ status: 'ok' });
         }
 
-        console.log(`[${requestId}] Received ${messages.length} message(s) from ${messages[0].platform}`);
+        log.info('webhook-meta', `Received ${messages.length} message(s) from ${messages[0].platform}`, { requestId });
 
         // Filter: dedup + skip bot self-messages
         const validMessages = [];
         for (const msg of messages) {
             if (await isDuplicate(msg.messageId)) {
-                console.log(`[${requestId}] Skipping duplicate message ${msg.messageId}`);
+                log.info('webhook-meta', 'Skipping duplicate message', { requestId, messageId: msg.messageId });
                 continue;
             }
             if (msg.senderId === msg.recipientId) {
-                console.log(`[${requestId}] Skipping bot self-message`);
+                log.info('webhook-meta', 'Skipping bot self-message', { requestId });
                 continue;
             }
             validMessages.push(msg);
@@ -170,7 +172,7 @@ export async function POST(req) {
         const qstashSent = await publishToQStash(qstashPayload);
 
         if (qstashSent) {
-            console.log(`[${requestId}] ${validMessages.length} message(s) dispatched to QStash for async processing`);
+                log.info('webhook-meta', `${validMessages.length} message(s) dispatched to QStash for async processing`, { requestId });
             return Response.json({ status: 'ok', processed: validMessages.length, async: true });
         }
 
@@ -193,11 +195,16 @@ export async function POST(req) {
                 });
 
                 if (result.content) {
-                    const sendResult = await sendMetaMessage(msg.senderId, result.content, msg.platform);
+                    let sendResult;
+                    if (msg.platform === 'whatsapp') {
+                        sendResult = await sendWhatsAppMessage(msg.senderId, result.content, msg.recipientId);
+                    } else {
+                        sendResult = await sendMetaMessage(msg.senderId, result.content, msg.platform);
+                    }
                     responses.push({ senderId: msg.senderId?.slice(-4), platform: msg.platform, ...sendResult });
                 }
             } catch (error) {
-                console.error(`[${requestId}] Error processing message from ${msg.senderId?.slice(-4)}:`, error.message);
+                log.error('webhook-meta', `Error processing message from ${msg.senderId?.slice(-4)}`, { requestId, error: error.message, platform: msg.platform });
                 Sentry.captureException(error, { tags: { module: 'meta-webhook', requestId, platform: msg.platform } });
                 responses.push({ senderId: msg.senderId?.slice(-4), platform: msg.platform, success: false, error: error.message });
             }
@@ -205,7 +212,7 @@ export async function POST(req) {
 
         return Response.json({ status: 'ok', processed: responses.length, responses });
     } catch (error) {
-        console.error(`[${requestId}] Meta webhook critical error:`, error.message);
+        log.error('webhook-meta', 'Meta webhook critical error', { requestId, error: error.message });
         Sentry.captureException(error, {
             tags: { module: 'meta-webhook', code: 'CRITICAL', requestId },
         });

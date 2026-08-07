@@ -14,23 +14,24 @@
  */
 import { sendDailySummary } from '@/lib/twilio';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { log } from '@/lib/logger';
 export async function POST(req) {
     // CRON AUTH: Only allow calls with the secret
     const authHeader = req.headers.get('authorization');
     const cronSecret = process.env.CRON_SECRET;
 
     if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
-        console.warn('Daily summary cron: unauthorized call attempt');
+        log.warn('daily-summary', 'Daily summary cron: unauthorized call attempt');
         return Response.json(
             { error: { code: 'UNAUTHORIZED', message: 'Invalid or missing CRON_SECRET' } },
             { status: 401 }
         );
     }
 
-    console.log('Daily summary cron: starting...');
+    log.info('daily-summary', 'Daily summary cron: starting...');
 
     if (!supabaseAdmin) {
-        console.error('Daily summary cron: no Supabase configured');
+        log.error('daily-summary', 'Daily summary cron: no Supabase configured');
         return Response.json(
             { error: { code: 'NO_SUPABASE', message: 'Supabase not configured' } },
             { status: 500 }
@@ -45,7 +46,7 @@ export async function POST(req) {
             .eq('is_active', true);
 
         if (bizError) {
-            console.error('Daily summary cron: failed to fetch businesses:', bizError.message);
+            log.error('daily-summary', 'Daily summary cron: failed to fetch businesses', { error: bizError.message });
             return Response.json(
                 { error: { code: 'DB_ERROR', message: 'Failed to fetch businesses' } },
                 { status: 500 }
@@ -53,11 +54,11 @@ export async function POST(req) {
         }
 
         if (!businesses || businesses.length === 0) {
-            console.log('Daily summary cron: no active businesses');
+            log.info('daily-summary', 'Daily summary cron: no active businesses');
             return Response.json({ success: true, count: 0 });
         }
 
-        console.log(`Daily summary cron: processing ${businesses.length} business(es)`);
+        log.info('daily-summary', `Daily summary cron: processing ${businesses.length} business(es)`, { count: businesses.length });
 
         // Try QStash for reliable async processing
         const qstashToken = process.env.QSTASH_TOKEN;
@@ -70,10 +71,10 @@ export async function POST(req) {
                     body: { businesses },
                     retries: 3,
                 });
-                console.log('Daily summary cron: dispatched to QStash for async processing');
+                log.info('daily-summary', 'Daily summary cron: dispatched to QStash for async processing');
                 return Response.json({ success: true, async: true, count: businesses.length });
             } catch (qstashErr) {
-                console.warn('Daily summary cron: QStash publish failed, falling back to sync:', qstashErr.message);
+                log.warn('daily-summary', 'Daily summary cron: QStash publish failed, falling back to sync', { error: qstashErr.message });
             }
         }
 
@@ -96,10 +97,10 @@ export async function POST(req) {
             }
         }
 
-        console.log('Daily summary cron: completed', results);
+        log.info('daily-summary', 'Daily summary cron: completed', { results });
         return Response.json({ success: true, results });
     } catch (error) {
-        console.error('Daily summary cron: unexpected error:', error.message);
+        log.error('daily-summary', 'Daily summary cron: unexpected error', { error: error.message });
         return Response.json(
             { error: { code: 'INTERNAL_ERROR', message: 'Internal server error' } },
             { status: 500 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 
 const STEPS = [
     {
@@ -225,7 +226,7 @@ export default function SetupPage() {
                         Set Up Your AI Concierge
                     </h1>
                     <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '1.05rem', lineHeight: '1.7', maxWidth: '500px', margin: '0 auto' }}>
-                        Connect each service below. Maya won't go live until everything is verified.
+                        Connect each service below. Maya won&apos;t go live until everything is verified.
                     </p>
                 </div>
 
@@ -292,13 +293,13 @@ export default function SetupPage() {
                 </div>
 
                 <div style={{ textAlign: 'center', marginTop: '32px' }}>
-                    <a href="/" style={{
+                    <Link href="/" style={{
                         color: 'rgba(255,255,255,0.3)',
                         textDecoration: 'none',
                         fontSize: '0.85rem',
                     }}>
                         &larr; Back to home
-                    </a>
+                    </Link>
                 </div>
             </div>
         </main>

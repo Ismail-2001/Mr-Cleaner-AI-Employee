@@ -1,4 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { requireSession } from '@/lib/session';
+import { log } from '@/lib/logger';
 
 const SETTINGS_ID = 'business_settings';
 
@@ -9,6 +11,15 @@ const DEFAULT_SETTINGS = {
     twilio_phone: '+1 (507) 479-7804',
     whatsapp_number: '+1 (507) 479-7804',
     ai_personality: 'maya',
+    business_hours: {
+        mon: { open: '08:00', close: '18:00', enabled: true },
+        tue: { open: '08:00', close: '18:00', enabled: true },
+        wed: { open: '08:00', close: '18:00', enabled: true },
+        thu: { open: '08:00', close: '18:00', enabled: true },
+        fri: { open: '08:00', close: '18:00', enabled: true },
+        sat: { open: '09:00', close: '14:00', enabled: true },
+        sun: { open: '00:00', close: '00:00', enabled: false },
+    },
 };
 
 export async function GET() {
@@ -34,6 +45,10 @@ export async function GET() {
 }
 
 export async function PUT(req) {
+    // Defense-in-depth: middleware also guards this, but verify here too
+    const { session, response: authError } = await requireSession(req);
+    if (authError) return authError;
+
     if (!supabaseAdmin) {
         return Response.json({ error: 'Database not configured' }, { status: 503 });
     }
@@ -49,7 +64,23 @@ export async function PUT(req) {
         const sanitized = {};
         for (const key of Object.keys(DEFAULT_SETTINGS)) {
             if (settings[key] !== undefined) {
-                sanitized[key] = String(settings[key]).trim();
+                if (key === 'business_hours' && typeof settings[key] === 'object') {
+                    // Validate nested business_hours structure
+                    const hours = settings[key];
+                    const validDays = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+                    sanitized[key] = {};
+                    for (const day of validDays) {
+                        if (hours[day] && typeof hours[day] === 'object') {
+                            sanitized[key][day] = {
+                                open: String(hours[day].open || '08:00').trim(),
+                                close: String(hours[day].close || '18:00').trim(),
+                                enabled: Boolean(hours[day].enabled),
+                            };
+                        }
+                    }
+                } else {
+                    sanitized[key] = String(settings[key]).trim();
+                }
             }
         }
 
@@ -65,7 +96,7 @@ export async function PUT(req) {
 
         return Response.json({ success: true, settings: sanitized });
     } catch (error) {
-        console.error('Settings save error:', error.message);
+        log.error('settings', 'Settings save error', { error: error.message });
         return Response.json({ error: 'Invalid request' }, { status: 400 });
     }
 }

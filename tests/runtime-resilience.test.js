@@ -60,8 +60,8 @@ describe('runtime resilience — edge cases', () => {
             service: 'Executive Preservation',
         });
         const parsed = JSON.parse(result);
-        expect(parsed.payment_url).toBeDefined();
-        expect(parsed.provider).toBe('mock');
+        expect(parsed.error).toBeDefined();
+        expect(parsed.provider).toBeNull();
     });
 
     it('handles null supabaseAdmin in maestro without crashing', async () => {

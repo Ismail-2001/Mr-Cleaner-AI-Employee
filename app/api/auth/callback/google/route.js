@@ -1,5 +1,6 @@
 import { handleAuthCallback } from '@/lib/calendar';
 import { NextResponse } from 'next/server';
+import { log } from '@/lib/logger';
 
 /**
  * Google OAuth callback handler.
@@ -21,7 +22,7 @@ export async function GET(req) {
     // Verify state parameter against cookie to prevent CSRF
     const storedState = req.cookies.get('oauth_state')?.value;
     if (!state || !storedState || state !== storedState) {
-        console.error('OAuth CSRF: state mismatch or missing');
+        log.error('google-auth', 'OAuth CSRF: state mismatch or missing');
         return new Response('Authentication failed: invalid state parameter.', {
             status: 403,
             headers: { 'Content-Type': 'text/plain' },
@@ -39,7 +40,7 @@ export async function GET(req) {
         response.headers.set('Set-Cookie', 'oauth_state=; Path=/; Max-Age=0');
         return response;
     } catch (error) {
-        console.error('Auth Callback Route Error:', error.message);
+        log.error('google-auth', 'Auth Callback Route Error', { error: error.message });
         return new Response('Authentication failed. Please check your server logs.', {
             status: 500,
             headers: { 'Content-Type': 'text/plain' },

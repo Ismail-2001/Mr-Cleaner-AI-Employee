@@ -11,6 +11,7 @@ import * as Sentry from '@sentry/nextjs';
 import { exchangeJobberCode } from '@/lib/jobber';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { encrypt } from '@/lib/encrypt';
+import { log } from '@/lib/logger';
 
 export async function GET(req) {
     const { searchParams } = new URL(req.url);
@@ -20,7 +21,7 @@ export async function GET(req) {
 
     // Handle OAuth errors
     if (error) {
-        console.error('Jobber OAuth error:', error);
+        log.error('jobber-callback', 'Jobber OAuth error', { error });
         return Response.redirect(new URL('/dashboard?error=jobber_auth_failed', process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'));
     }
 
@@ -37,7 +38,7 @@ export async function GET(req) {
             .single();
 
         if (!storedState) {
-            console.error('Jobber OAuth: invalid state parameter');
+            log.error('jobber-callback', 'Jobber OAuth: invalid state parameter');
             return Response.redirect(new URL('/dashboard?error=jobber_invalid_state', process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'));
         }
 
@@ -48,7 +49,7 @@ export async function GET(req) {
     // Exchange code for tokens
     const tokens = await exchangeJobberCode(code);
     if (!tokens) {
-        console.error('Jobber OAuth: token exchange failed');
+        log.error('jobber-callback', 'Jobber OAuth: token exchange failed');
         return Response.redirect(new URL('/dashboard?error=jobber_token_exchange_failed', process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'));
     }
 
@@ -68,7 +69,7 @@ export async function GET(req) {
             connected_at: new Date().toISOString(),
         }, { onConflict: 'business_id,provider' });
 
-        console.log(`Jobber connected for business ${businessId}, account ${tokens.accountId}`);
+        log.info('jobber-callback', 'Jobber connected', { businessId, accountId: tokens.accountId });
     }
 
     return Response.redirect(new URL('/dashboard?success=jobber_connected', process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'));

@@ -177,7 +177,7 @@ export default function ChatInterface({ onClose, initialMessage }) {
             hasSentInitialRef.current = true;
             handleSend(initialMessage);
         }
-    }, [initialMessage, isLoadingSession]);
+    }, [initialMessage, isLoadingSession, handleSend]);
 
     const handleSend = useCallback(async (text, imageUrls = []) => {
         const messageText = text || input;
@@ -453,6 +453,8 @@ export default function ChatInterface({ onClose, initialMessage }) {
                                 <div className={styles.imagePreviewRow}>
                                     {pendingImages.map((img) => (
                                         <div key={img.preview} className={styles.imagePreview}>
+                                            {/* next/image cannot optimize blob: object URLs, so a plain img is required here */}
+                                            {/* eslint-disable-next-line @next/next/no-img-element */}
                                             <img src={img.preview} alt="Vehicle photo" />
                                             {img.uploading && <div className={styles.uploadOverlay}><div className={styles.spinner}></div></div>}
                                             <button

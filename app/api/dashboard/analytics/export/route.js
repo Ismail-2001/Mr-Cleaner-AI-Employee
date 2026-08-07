@@ -15,6 +15,7 @@
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { requireSession } from '@/lib/session';
 import { DEFAULT_BUSINESS_ID } from '@/lib/tenant';
+import { log } from '@/lib/logger';
 
 export async function GET(req) {
     const { response } = await requireSession(req);
@@ -66,7 +67,7 @@ export async function GET(req) {
             },
         });
     } catch (error) {
-        console.error('CSV export error:', error.message);
+        log.error('analytics-export', 'CSV export error', { error: error.message });
         return Response.json({ error: 'Export failed' }, { status: 500 });
     }
 }

@@ -24,3 +24,6 @@ yarn-error.log*
 # Vercel build artifacts
 .vercel/
 .vercel.output/
+
+# Next.js auto-generated files
+next-env.d.ts

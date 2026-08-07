@@ -23,6 +23,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { tryRedisOp } from '@/lib/redis';
 import { checkWebhookRateLimit } from '@/lib/rate-limit';
 import crypto from 'crypto';
+import { log } from '@/lib/logger';
 
 // ─── Idempotency: in-memory dedup fallback ───────────────────────────────────
 const dedupMemory = new Map();
@@ -67,7 +68,7 @@ export async function POST(req) {
         || '127.0.0.1';
     const rateLimit = await checkWebhookRateLimit(ip);
     if (rateLimit) {
-        console.log(`[${requestId}] Jobber webhook rate limited ip=${ip}`);
+        log.warn('jobber-webhook', 'Jobber webhook rate limited', { requestId, ip });
         return Response.json({ status: 'rate_limited' }, {
             status: 429,
             headers: { 'Retry-After': String(rateLimit.retryAfterSec) },
@@ -80,7 +81,7 @@ export async function POST(req) {
 
         // Signature verification
         if (!verifyJobberWebhook(rawBody, signature)) {
-            console.warn(`[${requestId}] Invalid Jobber webhook signature`);
+            log.warn('jobber-webhook', 'Invalid Jobber webhook signature', { requestId });
             return Response.json({ error: { code: 'FORBIDDEN' } }, { status: 403 });
         }
 
@@ -91,7 +92,7 @@ export async function POST(req) {
             return Response.json({ status: 'ok' });
         }
 
-        console.log(`[${requestId}] Jobber event: ${event.type}`);
+        log.info('jobber-webhook', 'Jobber event received', { requestId, eventType: event.type });
 
         // ─── Idempotency: dedup by raw body hash ─────────────────────────────────
         const dedupKey = 'jobber:dedup:' + crypto.createHash('sha256').update(rawBody).digest('hex');
@@ -100,13 +101,13 @@ export async function POST(req) {
             return added !== null;
         });
         if (dedupResult === false) {
-            console.log(`[${requestId}] Duplicate Jobber event, skipping.`);
+            log.info('jobber-webhook', 'Duplicate Jobber event, skipping', { requestId });
             return Response.json({ status: 'ok', duplicate: true });
         }
         if (dedupResult === null) {
             // Redis unavailable — use in-memory cache as fallback
             if (dedupMemory.has(dedupKey)) {
-                console.log(`[${requestId}] Duplicate Jobber event (memory), skipping.`);
+                log.info('jobber-webhook', 'Duplicate Jobber event (memory), skipping', { requestId });
                 return Response.json({ status: 'ok', duplicate: true });
             }
             dedupMemory.set(dedupKey, Date.now());
@@ -128,10 +129,10 @@ export async function POST(req) {
                     body: { requestId, event },
                     retries: 3,
                 });
-                console.log(`[${requestId}] Jobber event dispatched to QStash`);
+                log.info('jobber-webhook', 'Jobber event dispatched to QStash', { requestId });
                 return Response.json({ status: 'ok', event_type: event.type, async: true });
             } catch (qstashErr) {
-                console.warn(`[${requestId}] QStash publish failed, falling back to sync:`, qstashErr.message);
+                log.warn('jobber-webhook', 'QStash publish failed, falling back to sync', { requestId, error: qstashErr.message });
             }
         }
 
@@ -139,7 +140,7 @@ export async function POST(req) {
         await processJobberEvent(event, requestId);
         return Response.json({ status: 'ok', event_type: event.type });
     } catch (error) {
-        console.error(`[${requestId}] Jobber webhook error:`, error.message);
+        log.error('jobber-webhook', 'Jobber webhook error', { requestId, error: error.message });
         Sentry.captureException(error, { tags: { module: 'jobber-webhook', requestId } });
         return Response.json({ status: 'ok' }); // Always 200 to prevent retries
     }
@@ -171,15 +172,15 @@ async function processJobberEvent(event, requestId) {
                         .update({ status: ourStatus })
                         .eq('id', integration.id);
 
-                    console.log(`[${requestId}] Synced Jobber job ${event.jobId} → booking status: ${ourStatus}`);
+                    log.info('jobber-webhook', 'Synced Jobber job to booking status', { requestId, jobId: event.jobId, status: ourStatus });
                 }
             }
         }
 
         if (event.type === 'invoice_update') {
-            console.log(`[${requestId}] Jobber invoice ${event.invoiceId}: ${event.status}`);
+            log.info('jobber-webhook', 'Jobber invoice update', { requestId, invoiceId: event.invoiceId, status: event.status });
         }
     } catch (error) {
-        console.error(`[${requestId}] processJobberEvent error:`, error.message);
+        log.error('jobber-webhook', 'processJobberEvent error', { requestId, error: error.message });
     }
 }

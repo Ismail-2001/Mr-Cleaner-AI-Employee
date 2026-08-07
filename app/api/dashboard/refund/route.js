@@ -1,6 +1,7 @@
 import { requireSession } from '@/lib/session';
 import { processRefund } from '@/lib/refund';
 import { DEFAULT_BUSINESS_ID } from '@/lib/tenant';
+import { log } from '@/lib/logger';
 
 /**
  * POST /api/dashboard/refund
@@ -35,7 +36,7 @@ export async function POST(req) {
         // Business scope — booking must belong to this business (prevents cross-tenant refund)
         const businessId = DEFAULT_BUSINESS_ID;
 
-        console.log(`[${requestId}] Processing refund for booking: ${bookingId} (business: ${businessId})`);
+        log.info('refund', 'Processing refund', { requestId, bookingId, businessId });
 
         const result = await processRefund(bookingId, businessId);
 
@@ -58,7 +59,7 @@ export async function POST(req) {
 
         return Response.json({ success: true, data: result.data, request_id: requestId });
     } catch (error) {
-        console.error(`[${requestId}] Refund endpoint error:`, error.message);
+        log.error('refund', 'Refund endpoint error', { requestId, error: error.message });
         return Response.json(
             { error: { code: 'INTERNAL_ERROR', message: 'Failed to process refund', request_id: requestId } },
             { status: 500 }

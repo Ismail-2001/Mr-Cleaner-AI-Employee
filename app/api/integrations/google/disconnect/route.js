@@ -1,4 +1,5 @@
 import { clearGoogleTokens } from '@/lib/calendar';
+import { log } from '@/lib/logger';
 
 export async function POST() {
     try {
@@ -8,7 +9,7 @@ export async function POST() {
         }
         return Response.json({ success: true, message: 'Google Calendar disconnected' });
     } catch (error) {
-        console.error('Google disconnect error:', error.message);
+        log.error('google-disconnect', 'Google disconnect error', { error: error.message });
         return Response.json({ error: 'Internal error' }, { status: 500 });
     }
 }

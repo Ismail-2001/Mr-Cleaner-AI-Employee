@@ -9,23 +9,33 @@ export default function ReasoningLog() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        let mounted = true;
+        let pollInterval = null;
+
         const fetchLogs = async () => {
             try {
                 const res = await fetch('/api/dashboard/analytics');
-                if (!res.ok) {
-                    setLoading(false);
-                    return;
-                }
+                if (!res.ok) return;
                 const json = await res.json();
-                setLogs(json.logs || []);
+                if (mounted) {
+                    setLogs(json.logs || []);
+                }
             } catch {
                 // Analytics unavailable
             } finally {
-                setLoading(false);
+                if (mounted) setLoading(false);
             }
         };
 
         fetchLogs();
+
+        // Auto-refresh every 15 seconds so "LIVE" indicator is truthful
+        pollInterval = setInterval(fetchLogs, 15_000);
+
+        return () => {
+            mounted = false;
+            if (pollInterval) clearInterval(pollInterval);
+        };
     }, []);
 
     const formatTimestamp = (ts) => {

@@ -11,8 +11,29 @@ import {
     Calendar,
     MessageCircle,
     CheckCircle2,
-    AlertCircle
+    AlertCircle,
+    Clock
 } from 'lucide-react';
+
+const DEFAULT_BUSINESS_HOURS = {
+    mon: { open: '08:00', close: '18:00', enabled: true },
+    tue: { open: '08:00', close: '18:00', enabled: true },
+    wed: { open: '08:00', close: '18:00', enabled: true },
+    thu: { open: '08:00', close: '18:00', enabled: true },
+    fri: { open: '08:00', close: '18:00', enabled: true },
+    sat: { open: '09:00', close: '14:00', enabled: true },
+    sun: { open: '00:00', close: '00:00', enabled: false },
+};
+
+const DAY_LABELS = {
+    mon: 'Monday',
+    tue: 'Tuesday',
+    wed: 'Wednesday',
+    thu: 'Thursday',
+    fri: 'Friday',
+    sat: 'Saturday',
+    sun: 'Sunday',
+};
 
 export default function Settings() {
     const [status, setStatus] = useState({
@@ -28,6 +49,7 @@ export default function Settings() {
         twilio_phone: '+1 (507) 479-7804',
         whatsapp_number: '+1 (507) 479-7804',
         ai_personality: 'maya',
+        business_hours: DEFAULT_BUSINESS_HOURS,
     });
     const [saving, setSaving] = useState(false);
 
@@ -79,6 +101,29 @@ export default function Settings() {
 
     const update = (key, value) => {
         setSettings(prev => ({ ...prev, [key]: value }));
+    };
+
+    const updateBusinessHours = (day, field, value) => {
+        setSettings(prev => ({
+            ...prev,
+            business_hours: {
+                ...prev.business_hours,
+                [day]: {
+                    ...(prev.business_hours?.[day] || DEFAULT_BUSINESS_HOURS[day]),
+                    [field]: value,
+                },
+            },
+        }));
+    };
+
+    const formatHours = (open, close) => {
+        const to12h = (t) => {
+            const [h, m] = t.split(':').map(Number);
+            const period = h >= 12 ? 'PM' : 'AM';
+            const hour12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+            return `${hour12}:${String(m).padStart(2, '0')} ${period}`;
+        };
+        return `${to12h(open)} – ${to12h(close)}`;
     };
 
     const StatusBadge = ({ state }) => {
@@ -147,6 +192,75 @@ export default function Settings() {
                             <option value="maya">Maya (Elite Concierge)</option>
                             <option value="bruno">Bruno (Rugged Specialist)</option>
                         </select>
+                    </div>
+                </section>
+
+                {/* Section 3: Business Hours */}
+                <section className={`${styles.section} ${styles.fullWidth}`}>
+                    <div className={styles.sectionHeader}>
+                        <Clock size={20} />
+                        <h4>Business Hours</h4>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {Object.entries(DAY_LABELS).map(([day, label]) => {
+                            const hours = settings.business_hours?.[day] || DEFAULT_BUSINESS_HOURS[day];
+                            return (
+                                <div key={day} style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: '100px 60px 1fr 60px 1fr 80px',
+                                    gap: '8px',
+                                    alignItems: 'center',
+                                    padding: '8px 12px',
+                                    background: 'rgba(255,255,255,0.03)',
+                                    borderRadius: '8px',
+                                    border: '1px solid rgba(255,255,255,0.06)',
+                                }}>
+                                    <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.85rem', fontWeight: 500 }}>{label}</span>
+                                    <input
+                                        type="checkbox"
+                                        checked={hours.enabled}
+                                        onChange={e => updateBusinessHours(day, 'enabled', e.target.checked)}
+                                        style={{ cursor: 'pointer' }}
+                                    />
+                                    {hours.enabled ? (
+                                        <>
+                                            <input
+                                                type="time"
+                                                value={hours.open}
+                                                onChange={e => updateBusinessHours(day, 'open', e.target.value)}
+                                                style={{
+                                                    background: 'rgba(255,255,255,0.05)',
+                                                    border: '1px solid rgba(255,255,255,0.1)',
+                                                    borderRadius: '6px',
+                                                    padding: '6px 8px',
+                                                    color: '#fff',
+                                                    fontSize: '0.85rem',
+                                                }}
+                                            />
+                                            <span style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center' }}>to</span>
+                                            <input
+                                                type="time"
+                                                value={hours.close}
+                                                onChange={e => updateBusinessHours(day, 'close', e.target.value)}
+                                                style={{
+                                                    background: 'rgba(255,255,255,0.05)',
+                                                    border: '1px solid rgba(255,255,255,0.1)',
+                                                    borderRadius: '6px',
+                                                    padding: '6px 8px',
+                                                    color: '#fff',
+                                                    fontSize: '0.85rem',
+                                                }}
+                                            />
+                                            <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.8rem' }}>
+                                                {formatHours(hours.open, hours.close)}
+                                            </span>
+                                        </>
+                                    ) : (
+                                        <span style={{ gridColumn: '3 / 6', color: 'rgba(255,255,255,0.3)', fontSize: '0.85rem' }}>Closed</span>
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
                 </section>
 

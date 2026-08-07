@@ -1,88 +1,135 @@
-# Known Issues & Client Onboarding Guide
+# Known Issues & Production Readiness
 
-*Transparency builds trust. This document lists every known limitation, required setup step, and post-deploy TODO so you know exactly what you're getting.*
+*Transparent list of every limitation, required setup step, and post-deploy item.*
 
 ---
 
-## 1. Pre-Launch Checklist (Client Must Complete)
+## 1. Production Checklist (Client Must Complete)
 
-| # | Item | Owner | Time | Notes |
-|---|------|-------|------|-------|
-| 1 | **Google Calendar OAuth** | Client | 15 min | Create OAuth credentials in Google Cloud Console, paste IDs into env vars |
-| 2 | **Stripe Account** | Client | 10 min | Create Stripe account, copy secret + webhook secret |
-| 3 | **Gemini API Key** | Client | 5 min | Get free key at [aistudio.google.com](https://aistudio.google.com) — primary AI engine |
-| 4 | **Twilio Phone Number** | Client | 10 min | Purchase SMS-capable number, copy Account SID + Auth Token |
-| 5 | **Custom Domain** | Client | varies | Point DNS to Vercel deployment |
-| 6 | **Supabase Project** | Handled | — | Included in DFY setup, but client owns the Supabase account |
+| # | Item | Owner | Time | How |
+|---|------|-------|------|-----|
+| 1 | **Supabase project** | Client | 5 min | Create at supabase.com, run migrations |
+| 2 | **Gemini API key** | Client | 2 min | Get free key at aistudio.google.com |
+| 3 | **Generate secrets** | Client | 1 min | Run `node -e "console.log(crypto.randomBytes(32).toString('hex'))"` 3 times |
+| 4 | **Set env vars** | Client | 10 min | Add all required vars to Vercel dashboard |
+| 5 | **Business info** | Client | 2 min | Set BUSINESS_NAME, PHONE, EMAIL, LOCATION |
+| 6 | **Custom domain** | Client | varies | Add domain in Vercel, update DNS, set NEXT_PUBLIC_APP_URL |
+| 7 | **Uptime monitoring** | Client | 5 min | Set up UptimeRobot on /api/health |
+
+---
 
 ## 2. Features That Work Immediately (Zero Config)
 
-- ✅ **AI Chat (Maya)** — works with Gemini, DeepSeek, or OpenAI fallback
-- ✅ **Online Booking** — full calendar availability + booking creation
-- ✅ **Dashboard** — bookings table, analytics, reasoning log
-- ✅ **SMS Notifications** — Twilio integration
-- ✅ **WhatsApp Integration** — direct booking via WhatsApp
-- ✅ **Weather API** — real-time forecast for scheduling decisions
-- ✅ **Landing Page** — testimonials, stats, service menu
+- ✅ **AI Chat (Maya)** — Gemini primary, DeepSeek/OpenAI fallback
+- ✅ **Online Booking** — calendar availability + booking creation
+- ✅ **Dashboard** — bookings table, analytics, reasoning log, CSV export
+- ✅ **Landing Page** — testimonials, stats, service menu, hero animations
+- ✅ **Rate Limiting** — per-session + per-IP (Redis-backed when configured)
+- ✅ **CSRF Protection** — Origin/Referer validation on state-changing requests
+- ✅ **Input Validation** — Zod schemas on all API endpoints
+- ✅ **PII Redaction** — customer names/phones redacted from all logs
+- ✅ **Structured Logging** — JSON logs across all 37 source files
+- ✅ **Request ID Propagation** — X-Request-Id flows through entire request lifecycle
+- ✅ **API Versioning** — /api/v1/* routes available alongside /api/*
+- ✅ **Compression** — gzip enabled via next.config.mjs
+- ✅ **Cache Headers** — static assets immutable, health check no-cache
+- ✅ **Health Check** — returns uptime, response time, version, env status
+- ✅ **Environment Validation** — throws in production when critical vars missing
+- ✅ **Output Validation** — LLM responses validated against Zod schema before return
 
-## 3. Missing Env Vars (Optional, Non-Blocking)
+---
 
-These environment variables are optional — the app runs without them but the corresponding feature is disabled:
+## 3. Features Requiring Optional Env Vars
 
-```
-STRIPE_SECRET_KEY        — Payments disabled (no Stripe account linked)
-STRIPE_WEBHOOK_SECRET    — Stripe webhook verification disabled
-OPENAI_API_KEY           — OpenAI fallback disabled
-DEEPSEEK_API_KEY         — DeepSeek fallback disabled
-GEMINI_API_KEY           — Falls back to simulation mode (Maya says "simulation mode")
-GOOGLE_CALENDAR_CLIENT_ID + GOOGLE_CALENDAR_CLIENT_SECRET — Calendar sync disabled
-OPENWEATHER_API_KEY      — Weather forecasts disabled
-UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN — Rate limiter falls back to in-memory (cold-start unsafe)
-```
+| Feature | Required Vars | Status Without |
+|---------|--------------|----------------|
+| **SMS Notifications** | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER` | No SMS sent |
+| **Email Fallback** | `RESEND_API_KEY` | No email sent |
+| **Calendar Sync** | `GOOGLE_CALENDAR_CLIENT_ID`, `GOOGLE_CALENDAR_CLIENT_SECRET` | No Google Calendar events |
+| **Weather Forecasts** | `OPENWEATHER_API_KEY` | Returns simulation data |
+| **Stripe Payments** | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | No Stripe (LemonSqueezy still works) |
+| **Messenger/Instagram** | `META_ACCESS_TOKEN`, `META_APP_SECRET`, `META_WEBHOOK_VERIFY_TOKEN` | No Meta DM responses |
+| **WhatsApp Business** | `META_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_BUSINESS_ACCOUNT_ID` | No WhatsApp responses |
+| **Google Business Profile** | `GBP_API_KEY`, `GBP_PUBSUB_VERIFICATION_TOKEN` | No GBP auto-replies |
+| **Jobber CRM** | `JOBBER_CLIENT_ID`, `JOBBER_CLIENT_SECRET`, `JOBBER_WEBHOOK_SECRET` | No Jobber sync |
+| **Redis Rate Limiting** | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, `USE_REDIS=true` | Falls back to in-memory (not production-safe) |
+| **Async Processing** | `QSTASH_TOKEN`, `CRON_SECRET` | No async webhooks, no daily summary |
+| **Admin Rate-Limit Reset** | `ADMIN_API_SECRET` | Rate-limit reset endpoint returns 401 |
 
-## 4. Technical Limitations
+---
 
-- **Rate Limiting**: Chat API limited to 20 req/min per session + 30 req/min per IP (backstop); bookings POST limited to 5/min per IP; webhook endpoints 60/min per IP. When Redis is configured, limits persist across serverless cold starts.
-- **CSRF Protection**: POST/PUT/DELETE requests require Origin/Referer matching
-- **Session Expiry**: Dashboard sessions expire after 8 hours (configurable in `lib/session.js`)
-- **File Uploads**: Not implemented (codebase uses text-only chat)
-- **Multi-Tenancy**: Single-tenant install by default; multi-tenancy architecture planned but not deployed
-- **Google Calendar**: Requires manual OAuth setup in Google Cloud Console (step-by-step guide below)
+## 4. Rate Limiting
+
+| Endpoint | Limit | Window | Storage |
+|----------|-------|--------|---------|
+| Chat API | 20 req/session | 1 min | Redis or in-memory |
+| Chat API | 30 req/IP | 1 min | Redis or in-memory |
+| Bookings POST | 5 req/IP | 1 min | Redis or in-memory |
+| Dashboard Login | 5 req/IP | 15 min | Redis or in-memory |
+| Webhooks | 30 req/IP | 1 min | Redis or in-memory |
+| Admin Rate-Limit Reset | 5 req/IP | 5 min | Redis or in-memory |
+
+**Production note:** Without Redis, rate limiter resets on cold start (Vercel serverless). Set `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` + `USE_REDIS=true` for persistent rate limiting.
+
+---
+
+## 5. Security Posture
+
+| Category | Status | Notes |
+|----------|--------|-------|
+| RLS Policies | ✅ | All tables have Row Level Security enforced |
+| Auth | ✅ | Server-side JWT auth (no client-side password check) |
+| CSRF | ✅ | Origin/Referer validation on POST/PUT/DELETE |
+| Rate Limiting | ✅ | Redis-backed with in-memory fallback |
+| Input Validation | ✅ | Zod schemas on all API endpoints |
+| Output Validation | ✅ | LLM responses validated before return |
+| Session Revocation | ✅ | Logout immediately invalidates JWT |
+| PII Redaction | ✅ | Customer names/phones redacted from logs |
+| XSS Protection | ✅ | Content-Security-Policy headers set |
+| HTTPS | ✅ | Enforced on Vercel production |
+| API Keys | ✅ | No keys exposed in client bundle |
+| Model Failover | ✅ | Per-request provider fallback (Gemini → DeepSeek → OpenAI) |
+| Logging Resilience | ✅ | Log failures don't crash customer-facing responses |
+| Prompt Injection | ✅ | First-layer canary detection in maestro.js |
+| Request ID Propagation | ✅ | X-Request-Id flows through entire request lifecycle |
+| Env Validation | ✅ | Throws in production when critical vars missing |
+
+---
+
+## 6. Technical Limitations
+
+- **middleware.js → proxy.js migration**: Deferred — Next.js 16.1.6 does not ship `proxy.js`. Will migrate when stable Next.js 16 includes it.
 - **CSP**: Uses `unsafe-inline` and `unsafe-eval` required by Next.js hydration. To remove, implement nonce-based CSP with `next/script` nonce prop.
-- **Rate Limiter Storage**: Hybrid — Redis (Upstash/Vercel KV) when `UPSTASH_REDIS_REST_URL` env var is set, in-memory Map fallback otherwise. In-memory mode resets on cold start and doesn't work across instances. Set Upstash env vars for production persistence.
+- **Multi-Tenancy**: Single-tenant install by default. Multi-tenant architecture is deployed and functional (every query scoped by `business_id`).
+- **Session Expiry**: Dashboard sessions expire after 8 hours (configurable in `lib/session.js`).
+- **LemonSqueezy as Primary Payment**: Stripe is configured as fallback only. LemonSqueezy is the primary payment processor.
 
-## 5. Google Calendar Setup Guide (Required for Booking Sync)
+---
+
+## 7. Google Calendar Setup (Optional)
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
-2. Create a new OAuth 2.0 Client ID (Web application type)
-3. Add authorized redirect URI: `https://yourdomain.com/api/auth/callback/google`
-4. Copy **Client ID** and **Client Secret** into env vars:
-   ```
-   GOOGLE_CALENDAR_CLIENT_ID=your_client_id_here
-   GOOGLE_CALENDAR_CLIENT_SECRET=your_client_secret_here
-   ```
-5. Enable the Google Calendar API in the same console
+2. Create OAuth 2.0 Client ID (Web application type)
+3. Add redirect URI: `https://yourdomain.com/api/auth/callback/google`
+4. Copy Client ID + Client Secret to env vars
+5. Enable Google Calendar API in the same console
 
-## 6. Security Posture
+---
 
-| Category | Status |
-|----------|--------|
-| RLS Policies | ✅ All tables have RLS enforced |
-| Auth | ✅ Server-side JWT auth (no client-side password check) |
-| CSRF | ✅ Origin/Referer validation on state-changing requests |
-| Rate Limiting | ✅ Redis-backed (Upstash) with in-memory fallback; per-session + IP-based |
-| Input Validation | ✅ Zod schemas on all API endpoints |
-| Session Revocation | ✅ Logout immediately invalidates JWT |
-| PII Redaction | ✅ Customer names/phones redacted from logs (args + results) |
-| XSS Protection | ✅ Content-Security-Policy headers set |
-| HTTPS | ✅ Enforced on Vercel production |
-| API Keys | ✅ No keys exposed in client bundle |
-| Model Failover | ✅ Per-request provider fallback (Gemini → DeepSeek → OpenAI) |
-| Logging Resilience | ✅ Log failures don't crash customer-facing responses |
+## 8. Post-Launch Monitoring
 
-## 7. Post-Launch Monitoring
+- **Uptime**: Set up UptimeRobot on `https://yourdomain.com/api/health` (5-min intervals)
+- **Errors**: Sentry is pre-integrated — set `SENTRY_DSN` to enable
+- **Logs**: Vercel dashboard → Deployments → Functions → Logs
+- **Database**: Supabase dashboard → Logs → Postgres
+- **Analytics**: Check dashboard weekly for booking conversion rates
+- **Rate Limits**: Monitor `usage_logs` table for abuse patterns
 
-- Check Vercel dashboard for deployment logs and errors
-- Monitor Supabase table `usage_logs` for API usage patterns
-- Set up uptime monitoring (e.g., UptimeRobot) on the health endpoint: `https://yourdomain.com/api/health`
-- Review dashboard analytics weekly for booking conversion rates
+---
+
+## 9. Compliance
+
+- **TCPA** — SMS consent tracked per customer (`sms_consent` field)
+- **PII** — Customer data never logged in plaintext (PII redaction active)
+- **PCI** — LemonSqueezy/Stripe handles all card data (never touches our servers)
+- **GDPR** — Data export + deletion on request (via Supabase dashboard)

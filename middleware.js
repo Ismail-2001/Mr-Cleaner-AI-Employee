@@ -24,6 +24,9 @@ import { validateCsrf } from '@/lib/csrf';
  * invalidates the JWT before its natural 8-hour expiry.
  *
  * CSRF: Origin/Referer header checks on state-changing requests.
+ *
+ * REQUEST ID: Every matched request gets an X-Request-Id header (from client
+ * or generated). Route handlers read it from request.headers for log correlation.
  */
 async function verifySessionCookie(request) {
     const cookie = request.cookies.get(COOKIE_NAME);
@@ -43,6 +46,10 @@ async function verifySessionCookie(request) {
 export async function middleware(request) {
     const { pathname } = request.nextUrl;
 
+    // REQUEST ID: Extract from client header or generate new UUID.
+    // This flows through to route handlers via request.headers.get('x-request-id').
+    const requestId = request.headers.get('x-request-id') || crypto.randomUUID();
+
     // CSRF protection on state-changing requests (POST/PUT/DELETE)
     const csrfResult = validateCsrf(request);
     if (csrfResult) return csrfResult;
@@ -55,25 +62,34 @@ export async function middleware(request) {
         }
     }
 
-    // Protect dashboard data API — GET requires session, POST requires session on /refund
+    // Protect dashboard data API — session required on ALL methods for /api/dashboard/*
     if (pathname.startsWith('/api/dashboard') && pathname !== '/api/dashboard/auth') {
-        if (request.method === 'GET' || (request.method === 'POST' && pathname === '/api/dashboard/refund')) {
-            const valid = await verifySessionCookie(request);
-            if (!valid) {
-                return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-            }
-        }
-    }
-
-    // Protect GET /api/bookings (dashboard reads)
-    if (pathname === '/api/bookings' && request.method === 'GET') {
         const valid = await verifySessionCookie(request);
         if (!valid) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
     }
 
-    return NextResponse.next();
+    // Protect /api/bookings — session required on ALL methods (GET, POST, PUT, DELETE)
+    if (pathname === '/api/bookings') {
+        const valid = await verifySessionCookie(request);
+        if (!valid) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+    }
+
+    // Protect /api/v1/* — session required on ALL methods
+    if (pathname.startsWith('/api/v1/')) {
+        const valid = await verifySessionCookie(request);
+        if (!valid) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+    }
+
+    // Attach requestId to response headers so route handlers can read it
+    const response = NextResponse.next();
+    response.headers.set('x-request-id', requestId);
+    return response;
 }
 
 export const config = {
@@ -82,5 +98,6 @@ export const config = {
         '/api/bookings',
         '/api/chat',
         '/api/dashboard/:path*',
+        '/api/v1/:path*',
     ],
 };

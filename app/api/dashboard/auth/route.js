@@ -2,6 +2,7 @@ import { createSessionCookie } from '@/lib/session';
 import { timingSafeEqual } from 'crypto';
 import { validateBody, AuthRequestSchema } from '@/lib/api-validation';
 import { checkLoginRateLimit } from '@/lib/rate-limit';
+import { log } from '@/lib/logger';
 
 /**
  * POST /api/dashboard/auth — Server-side password validation.
@@ -19,7 +20,7 @@ export async function POST(req) {
     const ip = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown';
     const rateLimit = await checkLoginRateLimit(ip);
     if (rateLimit) {
-        console.log(`[${requestId}] Login rate limited ip=${ip}`);
+        log.info('dashboard-auth', 'Login rate limited', { requestId, ip });
         return Response.json(
             { error: { code: 'RATE_LIMITED', message: `Too many attempts. Try again in ${rateLimit.retryAfterSec}s.`, request_id: requestId } },
             { status: 429, headers: { 'Retry-After': String(rateLimit.retryAfterSec) } }
@@ -31,7 +32,7 @@ export async function POST(req) {
         const body = await req.json();
         const validation = validateBody(AuthRequestSchema, body);
         if (!validation.success) {
-            console.log(`[${requestId}] Auth validation failed`);
+            log.info('dashboard-auth', 'Auth validation failed', { requestId });
             return validation.response;
         }
         const { password } = validation.data;
@@ -39,7 +40,7 @@ export async function POST(req) {
         // Validate against server-side env var. NEVER hardcode secrets.
         const expectedPassword = process.env.DASHBOARD_PASSWORD;
         if (!expectedPassword) {
-            console.error(`[${requestId}] DASHBOARD_PASSWORD env var not set`);
+            log.error('dashboard-auth', 'DASHBOARD_PASSWORD env var not set', { requestId });
             return Response.json(
                 { error: { code: 'SERVER_CONFIG', message: 'Server configuration error', request_id: requestId } },
                 { status: 500 }
@@ -47,7 +48,7 @@ export async function POST(req) {
         }
 
         if (!process.env.DASHBOARD_SESSION_SECRET) {
-            console.error(`[${requestId}] DASHBOARD_SESSION_SECRET env var not set`);
+            log.error('dashboard-auth', 'DASHBOARD_SESSION_SECRET env var not set', { requestId });
             return Response.json(
                 { error: { code: 'SERVER_CONFIG', message: 'Server configuration error', request_id: requestId } },
                 { status: 500 }
@@ -62,7 +63,7 @@ export async function POST(req) {
         const expectedBuf = Buffer.from(expectedPassword);
         const inputBuf = Buffer.from(password);
         if (expectedBuf.length !== inputBuf.length) {
-            console.log(`[${requestId}] Invalid login attempt (wrong length)`);
+            log.info('dashboard-auth', 'Invalid login attempt (wrong length)', { requestId });
             return Response.json(
                 { error: { code: 'INVALID_CREDENTIALS', message: 'Invalid credentials', request_id: requestId } },
                 { status: 401 }
@@ -71,7 +72,7 @@ export async function POST(req) {
         const isValid = timingSafeEqual(inputBuf, expectedBuf);
 
         if (!isValid) {
-            console.log(`[${requestId}] Invalid login attempt`);
+            log.info('dashboard-auth', 'Invalid login attempt', { requestId });
             return Response.json(
                 { error: { code: 'INVALID_CREDENTIALS', message: 'Invalid credentials', request_id: requestId } },
                 { status: 401 }
@@ -80,7 +81,7 @@ export async function POST(req) {
 
         // Password valid — issue signed session cookie
         const cookie = await createSessionCookie();
-        console.log(`[${requestId}] Successful login`);
+        log.info('dashboard-auth', 'Successful login', { requestId });
 
         return Response.json(
             { success: true },
@@ -92,7 +93,7 @@ export async function POST(req) {
             }
         );
     } catch (error) {
-        console.error(`[${requestId}] Dashboard auth error:`, error.message);
+        log.error('dashboard-auth', 'Dashboard auth error', { requestId, error: error.message });
         return Response.json(
             { error: { code: 'AUTH_FAILED', message: 'Authentication failed', request_id: requestId } },
             { status: 500 }

@@ -12,16 +12,22 @@
 import * as Sentry from '@sentry/nextjs';
 import { sendDailySummary } from '@/lib/twilio';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { log } from '@/lib/logger';
 
 export async function POST(req) {
     const requestId = crypto.randomUUID();
 
     try {
         const qstashSigningKey = process.env.QSTASH_SIGNING_KEY;
-        if (qstashSigningKey) {
+        if (!qstashSigningKey) {
+            if (process.env.NODE_ENV === 'production') {
+                log.error('daily-summary-process', 'QSTASH_SIGNING_KEY not configured — rejecting in production', { requestId });
+                return Response.json({ error: 'Server misconfigured' }, { status: 500 });
+            }
+        } else {
             const signature = req.headers.get('upstash-signature');
             if (!signature) {
-                console.warn(`[${requestId}] Missing QStash signature`);
+                log.warn('daily-summary-process', 'Missing QStash signature', { requestId });
                 return Response.json({ error: 'Missing signature' }, { status: 403 });
             }
             try {
@@ -29,11 +35,11 @@ export async function POST(req) {
                 const rawBody = await req.text();
                 const isValid = await verify({ body: rawBody, signature, signingKey: qstashSigningKey });
                 if (!isValid) {
-                    console.warn(`[${requestId}] Invalid QStash signature`);
+                    log.warn('daily-summary-process', 'Invalid QStash signature', { requestId });
                     return Response.json({ error: 'Invalid signature' }, { status: 403 });
                 }
             } catch (verifyErr) {
-                console.error(`[${requestId}] QStash verification error:`, verifyErr.message);
+                log.error('daily-summary-process', 'QStash verification error', { requestId, error: verifyErr.message });
                 return Response.json({ error: 'Verification failed' }, { status: 403 });
             }
         }
@@ -45,7 +51,7 @@ export async function POST(req) {
             return Response.json({ status: 'ok', processed: 0 });
         }
 
-        console.log(`[${requestId}] QStash: processing daily summary for ${businesses.length} business(es)`);
+        log.info('daily-summary-process', `QStash: processing daily summary for ${businesses.length} business(es)`, { requestId, count: businesses.length });
 
         const results = [];
         for (const biz of businesses) {
@@ -64,10 +70,10 @@ export async function POST(req) {
             }
         }
 
-        console.log(`[${requestId}] QStash: daily summary completed`, results);
+        log.info('daily-summary-process', 'QStash: daily summary completed', { requestId, results });
         return Response.json({ status: 'ok', processed: results.length, results });
     } catch (error) {
-        console.error(`[${requestId}] QStash daily summary process error:`, error.message);
+        log.error('daily-summary-process', 'QStash daily summary process error', { requestId, error: error.message });
         Sentry.captureException(error, { tags: { module: 'daily-summary-qstash-process', requestId } });
         return Response.json({ status: 'error', message: error.message }, { status: 500 });
     }

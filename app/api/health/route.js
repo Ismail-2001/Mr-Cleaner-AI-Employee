@@ -1,14 +1,64 @@
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { tryRedisOp } from '@/lib/redis';
-import { getAllBreakerStatus } from '@/lib/circuit-breaker';
+import { log } from '@/lib/logger';
 
+const startTime = Date.now();
+
+/**
+ * GET /api/health — Public health check endpoint.
+ *
+ * SECURITY: Returns minimal status only. No config details, no service
+ * configuration, no circuit breaker internals. Use /api/health/verbose
+ * (requires Bearer token) for operational diagnostics.
+ */
 export async function GET(req) {
-    const cronSecret = process.env.CRON_SECRET;
-    if (cronSecret) {
-        const authHeader = req.headers.get('authorization');
-        if (authHeader !== `Bearer ${cronSecret}`) {
-            return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    const requestStart = Date.now();
+
+    const checks = {};
+
+    // Supabase
+    try {
+        if (supabaseAdmin) {
+            const { error } = await supabaseAdmin.from('bookings').select('id').limit(1);
+            checks.supabase = error ? 'degraded' : 'connected';
+        } else {
+            checks.supabase = 'not_configured';
         }
+    } catch {
+        checks.supabase = 'unhealthy';
+    }
+
+    const values = Object.values(checks).filter(v => typeof v === 'string');
+    const status = values.includes('unhealthy') ? 'degraded' : values.includes('not_configured') ? 'degraded' : 'ok';
+    const httpStatus = values.includes('unhealthy') ? 503 : status === 'degraded' ? 207 : 200;
+
+    return Response.json({
+        status,
+        timestamp: new Date().toISOString(),
+        uptime_sec: Math.floor((Date.now() - startTime) / 1000),
+        response_time_ms: Date.now() - requestStart,
+    }, {
+        status: httpStatus,
+        headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+    });
+}
+
+/**
+ * POST /api/health — Verbose health check (requires Bearer token).
+ *
+ * Returns full diagnostics: service configs, circuit breaker states, AI
+ * provider status, integration configs. For operational use only.
+ */
+export async function POST(req) {
+    const requestStart = Date.now();
+
+    // Auth check — requires admin secret or CRON_SECRET
+    const authHeader = req.headers.get('authorization');
+    const adminSecret = process.env.ADMIN_API_SECRET;
+    const cronSecret = process.env.CRON_SECRET;
+    const token = authHeader?.replace('Bearer ', '');
+
+    if (!token || (token !== adminSecret && token !== cronSecret)) {
+        return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const checks = {};
@@ -25,39 +75,24 @@ export async function GET(req) {
         checks.supabase = 'unhealthy';
     }
 
-    // AI
-    const hasGemini = !!process.env.GEMINI_API_KEY;
-    const hasDeepSeek = !!process.env.DEEPSEEK_API_KEY;
-    const hasOpenAI = !!process.env.OPENAI_API_KEY;
-    checks.ai = hasGemini || hasDeepSeek || hasOpenAI ? 'connected' : 'not_configured';
-    checks.gemini = hasGemini ? 'configured' : 'not_configured';
-    checks.deepseek = hasDeepSeek ? 'configured' : 'not_configured';
-    checks.openai = hasOpenAI ? 'configured' : 'not_configured';
+    // AI — presence only, not actual keys
+    checks.ai_providers = [
+        process.env.GEMINI_API_KEY ? 'gemini' : null,
+        process.env.DEEPSEEK_API_KEY ? 'deepseek' : null,
+        process.env.OPENAI_API_KEY ? 'openai' : null,
+    ].filter(Boolean);
 
-    // Stripe
-    checks.stripe = process.env.STRIPE_SECRET_KEY ? 'configured' : 'not_configured';
+    // Integrations — presence only
+    checks.integrations = {
+        stripe: !!process.env.STRIPE_SECRET_KEY,
+        lemonsqueezy: !!(process.env.LEMONSQUEEZY_API_KEY && process.env.LEMONSQUEEZY_STORE_ID),
+        redis: !!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN),
+        twilio: !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN),
+        resend: !!process.env.RESEND_API_KEY,
+        weather: !!process.env.OPENWEATHER_API_KEY,
+    };
 
-    // LemonSqueezy
-    checks.lemonsqueezy = (process.env.LEMONSQUEEZY_API_KEY && process.env.LEMONSQUEEZY_STORE_ID)
-        ? 'configured'
-        : 'not_configured';
-
-    // Redis / Upstash (rate limiting + advisory locks + caching)
-    const redisOk = await tryRedisOp(r => r.set('health:ping', '1', { ex: 60 }));
-    checks.redis = redisOk === true ? 'connected' : 'not_configured';
-
-    // Dashboard auth
-    checks.dashboard = (process.env.DASHBOARD_PASSWORD && process.env.DASHBOARD_SESSION_SECRET)
-        ? 'configured'
-        : 'not_configured';
-
-    // Integrations
-    checks.weather_api = process.env.OPENWEATHER_API_KEY ? 'configured' : 'not_configured';
-    checks.twilio = (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN)
-        ? 'configured'
-        : 'not_configured';
-    checks.resend = process.env.RESEND_API_KEY ? 'configured' : 'not_configured';
-
+    // Calendar
     try {
         if (supabaseAdmin) {
             const { data: tokenData } = await supabaseAdmin
@@ -65,30 +100,25 @@ export async function GET(req) {
                 .select('id')
                 .eq('id', 'google_tokens')
                 .maybeSingle();
-            checks.calendar = tokenData ? 'configured' : 'not_configured';
-        } else {
-            checks.calendar = 'not_configured';
+            checks.integrations.calendar = !!tokenData;
         }
     } catch {
-        checks.calendar = 'unhealthy';
+        checks.integrations.calendar = false;
     }
 
-    // PII encryption
-    checks.pii_encryption = process.env.ENCRYPTION_KEY ? 'configured' : 'not_configured';
-
-    // Circuit breakers
-    checks.circuit_breakers = getAllBreakerStatus();
-
-    const values = Object.values(checks).filter(v => typeof v === 'string');
-    const status = values.includes('unhealthy') ? 'degraded' : values.includes('not_configured') ? 'degraded' : 'ok';
-    const httpStatus = values.includes('unhealthy') ? 503 : status === 'degraded' ? 207 : 200;
+    const values = Object.values(checks).flat();
+    const status = values.includes('unhealthy') ? 'degraded' : 'ok';
 
     return Response.json({
         status,
         timestamp: new Date().toISOString(),
+        uptime_sec: Math.floor((Date.now() - startTime) / 1000),
+        response_time_ms: Date.now() - requestStart,
+        version: process.env.npm_package_version || '0.1.0',
+        env: process.env.NODE_ENV || 'development',
         ...checks,
     }, {
-        status: httpStatus,
+        status: status === 'degraded' ? 207 : 200,
         headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
     });
 }
