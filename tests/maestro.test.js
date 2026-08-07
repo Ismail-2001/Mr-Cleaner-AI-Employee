@@ -45,7 +45,9 @@ vi.mock('@/lib/supabase-admin', () => ({
                 }),
             }),
             update: vi.fn().mockReturnValue({
-                eq: vi.fn().mockResolvedValue({ data: null, error: null }),
+                eq: vi.fn().mockReturnValue({
+                    eq: vi.fn().mockResolvedValue({ data: null, error: null }),
+                }),
             }),
             upsert: vi.fn().mockResolvedValue({ data: null, error: null }),
             insert: vi.fn().mockResolvedValue({ data: null, error: null }),

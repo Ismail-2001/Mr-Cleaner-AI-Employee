@@ -120,7 +120,8 @@ export async function POST(req) {
                         address: mergedCustomerData.address || '',
                         zip_code: mergedCustomerData.zip_code || '',
                         status: 'confirmed',
-                        stripe_session_id: orderId,
+                        payment_provider: 'lemonsqueezy',
+                        stripe_session_id: orderId, // Legacy: kept for backward compat; use payment_provider
                         notes: `Deposit paid via LemonSqueezy. Order: ${orderId}${servicePrice === null ? ' (price missing from chat session)' : ''}`,
                     }]);
 
