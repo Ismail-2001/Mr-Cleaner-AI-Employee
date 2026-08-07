@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { DASHBOARD_PASSWORD } from './env.js';
 
 test.describe('Bookings API — GET /api/bookings', () => {
     test('returns 401 without session', async ({ request }) => {
@@ -33,7 +34,7 @@ test.describe('Bookings API — Authenticated Flow', () => {
 
     test.beforeAll(async ({ request }) => {
         const authRes = await request.post('/api/dashboard/auth', {
-            data: { password: 'e2e-test-password-12345' },
+            data: { password: DASHBOARD_PASSWORD },
         });
         if (authRes.status() === 200) {
             const setCookie = authRes.headers()['set-cookie'] || '';

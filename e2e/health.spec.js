@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { ADMIN_API_SECRET } from './env.js';
 
 test.describe('Health Check — GET /api/health', () => {
     test('returns 200 with status field', async ({ request }) => {
@@ -46,7 +47,7 @@ test.describe('Health Check — POST /api/health (verbose)', () => {
 
     test('returns 200 with valid admin token', async ({ request }) => {
         const res = await request.post('/api/health', {
-            headers: { 'Authorization': 'Bearer e2e-test-password-12345' },
+            headers: { 'Authorization': `Bearer ${ADMIN_API_SECRET}` },
         });
         expect([200, 207]).toContain(res.status());
 

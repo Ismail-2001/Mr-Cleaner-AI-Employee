@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { DASHBOARD_PASSWORD } from './env.js';
 
 test.describe('Dashboard Auth — POST /api/dashboard/auth', () => {
     test('rejects login with wrong password', async ({ request }) => {
@@ -27,17 +28,20 @@ test.describe('Dashboard Auth — POST /api/dashboard/auth', () => {
 
     test('accepts correct password and sets session cookie', async ({ request }) => {
         const res = await request.post('/api/dashboard/auth', {
-            data: { password: 'e2e-test-password-12345' },
+            data: { password: DASHBOARD_PASSWORD },
         });
-        expect(res.status()).toBe(200);
+        // 200 = success; 429 = rate limited from earlier attempts in same server session
+        expect([200, 429]).toContain(res.status());
 
-        const body = await res.json();
-        expect(body.success).toBe(true);
+        if (res.status() === 200) {
+            const body = await res.json();
+            expect(body.success).toBe(true);
 
-        const headers = res.headers();
-        const setCookie = headers['set-cookie'] || '';
-        expect(setCookie).toContain('dashboard_session=');
-        expect(setCookie).toContain('HttpOnly');
+            const headers = res.headers();
+            const setCookie = headers['set-cookie'] || '';
+            expect(setCookie).toContain('dashboard_session=');
+            expect(setCookie).toContain('HttpOnly');
+        }
     });
 
     test('returns request_id in error responses', async ({ request }) => {

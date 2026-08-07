@@ -16,6 +16,7 @@
     "db:migrate": "node scripts/migrate.js"
   },
   "dependencies": {
+    "@opentelemetry/core": "^2.10.0",
     "@sentry/nextjs": "^10.67.0",
     "@supabase/supabase-js": "^2.95.3",
     "@upstash/qstash": "^2.11.3",
