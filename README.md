@@ -6,11 +6,12 @@
 
 ![Version](https://img.shields.io/badge/version-0.1.0-blue?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-243%20passing-brightgreen?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-243%20unit%20%2B%2028%20E2E-brightgreen?style=flat-square)
 ![Node](https://img.shields.io/badge/node-20.x-339933?style=flat-square&logo=node.js&logoColor=white)
 ![Next.js](https://img.shields.io/badge/Next.js-16-black?style=flat-square&logo=next.js&logoColor=white)
+![Lint](https://img.shields.io/badge/lint-0%20errors-brightgreen?style=flat-square)
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/Mr-Cleaner-AI-Employee/Mr-Cleaner-AI-Employee)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/Ismail-2001/Mr-Cleaner-AI-Employee)
 
 **Stop losing customers to slow responses. Let Maya book while you work.**
 
@@ -43,10 +44,11 @@ SMS via Twilio       ──►   /api/cron/*       ──►       ▼          
 ```
 
 **Key architectural decisions:**
-- **Orchestration engine** (`lib/maestro.js`) — single entry point shared across all channels (web, Messenger, Instagram)
-- **Tool-calling loop** — AI decides which tools to call, results feed back until the AI has enough to respond
-- **Circuit breaker** (`lib/circuit-breaker.js`) — tracks consecutive failures per AI model; trips to OPEN after 3 failures, 60s cooldown
+- **Orchestration engine** (`lib/maestro.js`) — single entry point shared across all channels (web, Messenger, Instagram, WhatsApp)
+- **Tool-calling loop** — AI decides which tools to call, results feed back until the AI has enough to respond (max 5 iterations, 50K token budget)
+- **Circuit breaker** (`lib/circuit-breaker.js`) — tracks consecutive failures per AI model; trips to OPEN after 3 failures, 60s cooldown; persists state to Redis across cold starts
 - **Multi-tenant by default** — every query scoped by `business_id`; zero cross-tenant data leaks
+- **Distributed state** — session revocation and circuit breaker state stored in Redis (O(1) lookups) with in-memory fallback
 
 ---
 
@@ -63,6 +65,7 @@ SMS via Twilio       ──►   /api/cron/*       ──►       ▼          
 - **Web chat widget** — embed on any website
 - **Meta Messenger** — Facebook Page integration
 - **Instagram DMs** — automated responses to DMs
+- **WhatsApp Business** — Cloud API integration
 - **Google Business Profile** — review replies and auto-responses
 - **SMS via Twilio** — lead alerts and customer confirmations
 
@@ -72,14 +75,24 @@ SMS via Twilio       ──►   /api/cron/*       ──►       ▼          
 - Auto-detailing terminology translations
 - Seamless language switching mid-conversation
 
+### Dashboard
+- **Bookings table** — search, filter, detail modal
+- **Analytics** — date range filtering, week-over-week trends, CSV export
+- **Settings** — business hours editor, configuration
+- **Reasoning log** — real-time AI decision transparency (15s auto-refresh)
+- **Loading skeletons** — progressive UI on initial load
+
 ### Enterprise Security
 - **Rate limiting** — per-session + per-IP (Redis with in-memory fallback)
 - **Prompt injection guard** — first-layer canary detection on all user messages
 - **PII encryption** — AES-256-GCM at rest for customer data
-- **PII redaction** — customer data stripped from all logs
+- **PII redaction** — customer data stripped from all logs and LLM responses
 - **HMAC webhook verification** — Meta, Stripe, LemonSqueezy, Google
-- **Circuit breaker** — prevents cascade failures across AI providers
-- **JWT sessions** — server-side revocation, 8-hour lifetime
+- **Circuit breaker** — prevents cascade failures across AI providers, persists to Redis
+- **JWT sessions** — server-side revocation via Redis, 8-hour lifetime
+- **CSRF protection** — Origin/Referer validation on all state-changing requests
+- **Request ID propagation** — X-Request-Id flows through entire request lifecycle
+- **Environment validation** — throws in production when critical vars are missing
 
 ---
 
@@ -93,7 +106,7 @@ SMS via Twilio       ──►   /api/cron/*       ──►       ▼          
 | **AI Engine** | Gemini 2.0 Flash (primary) | Fast, free tier, 15 RPM |
 | **AI Fallback** | DeepSeek → OpenAI | Graceful degradation on failure |
 | **Database** | Supabase (PostgreSQL) | Managed, real-time, free tier |
-| **Cache** | Upstash Redis (optional) | Serverless rate limiting, circuit breaker state |
+| **Cache** | Upstash Redis (optional) | Serverless rate limiting, circuit breaker state, session revocation |
 | **Payments** | LemonSqueezy (primary) | Pakistan-compatible, webhook-verified |
 | **Payments (fallback)** | Stripe | Industry-standard, deposit collection |
 | **Calendar** | Google Calendar API | Real-time sync, no double-bookings |
@@ -101,9 +114,10 @@ SMS via Twilio       ──►   /api/cron/*       ──►       ▼          
 | **Email** | Resend | Clean templates, free 100/day |
 | **Auth** | JWT (jose) | Stateless, server-side revocation |
 | **Monitoring** | Sentry + structured JSON logs | Error tracking, request tracing |
-| **Validation** | Zod schemas | Type-safe input validation at every boundary |
-| **Testing** | Vitest (unit) + Playwright (E2E) | 243 unit tests + 30 E2E tests |
+| **Validation** | Zod v4 schemas | Type-safe input/output validation at every boundary |
+| **Testing** | Vitest (unit) + Playwright (E2E) | 243 unit tests + 28 API-level E2E tests |
 | **Deployment** | Vercel (zero-config) | Auto-deploy on push, edge functions |
+| **CI** | GitHub Actions | Lint → unit tests → build → E2E (sequential) |
 
 ---
 
@@ -118,7 +132,7 @@ SMS via Twilio       ──►   /api/cron/*       ──►       ▼          
 ### 1. Clone & Install
 
 ```bash
-git clone https://github.com/Mr-Cleaner-AI-Employee/Mr-Cleaner-AI-Employee.git
+git clone https://github.com/Ismail-2001/Mr-Cleaner-AI-Employee.git
 cd Mr-Cleaner-AI-Employee
 npm install
 ```
@@ -178,6 +192,9 @@ Run in your Supabase SQL Editor (in order):
 
 -- 5. Loyalty program
 \i supabase/0005_loyalty_program.sql
+
+-- 6. Payment provider tracking
+\i supabase/0006_payment_provider_column.sql
 ```
 
 Or use the migration runner:
@@ -200,7 +217,7 @@ Visit [http://localhost:3000](http://localhost:3000) — Maya is live.
 npx vercel --prod
 ```
 
-Or connect your GitHub repo to Vercel for auto-deploys on every push.
+Or connect your GitHub repo to Vercel for auto-deploys on every push. See [DEPLOY.md](DEPLOY.md) for the full production deployment checklist.
 
 ---
 
@@ -213,13 +230,14 @@ Or connect your GitHub repo to Vercel for auto-deploys on every push.
 │   │   ├── bookings/                 Booking CRUD
 │   │   ├── calendar/                 Calendar availability
 │   │   ├── stripe/                   Stripe payment processing
-│   │   ├── lemon-squeezy/            LemonSqueezy webhook handler
-│   │   ├── dashboard/                Owner dashboard + analytics
+│   │   ├── lemonsqueezy/             LemonSqueezy webhook handler
+│   │   ├── dashboard/                Owner dashboard + analytics + CSV export
 │   │   ├── cron/                     Scheduled tasks (daily summary)
 │   │   ├── integrations/             Jobber, third-party
 │   │   ├── webhook/                  Meta, Google webhooks
-│   │   ├── health/                   System health check
-│   │   └── upload/                   Photo uploads
+│   │   ├── health/                   System health check (GET public, POST verbose)
+│   │   ├── upload/                   Photo uploads
+│   │   └── v1/                       API versioning (/api/v1/*)
 │   ├── booking/                      Customer-facing booking pages
 │   ├── dashboard/                    Owner dashboard UI
 │   ├── setup/                        Onboarding wizard
@@ -231,7 +249,7 @@ Or connect your GitHub repo to Vercel for auto-deploys on every push.
 │   ├── tools.js                      14 tool functions (quote, calendar, loyalty, etc.)
 │   ├── output-validator.js           LLM response validation (Zod schema)
 │   ├── logger.js                     Structured JSON logger with child loggers
-│   ├── circuit-breaker.js            AI model circuit breaker (CLOSED/OPEN/HALF-OPEN)
+│   ├── circuit-breaker.js            AI model circuit breaker (Redis-persisted)
 │   ├── calendar.js                   Google Calendar integration
 │   ├── stripe.js                     Stripe payment processing (fallback)
 │   ├── lemon-squeezy.js              LemonSqueezy API client (primary)
@@ -243,13 +261,15 @@ Or connect your GitHub repo to Vercel for auto-deploys on every push.
 │   ├── redis.js                      Shared Redis client (lazy-init, optional)
 │   ├── rate-limit.js                 Multi-tier rate limiting (Redis + in-memory fallback)
 │   ├── session.js                    JWT session management
+│   ├── revocation.js                 Redis-first session revocation (O(1) lookups)
 │   ├── tenant.js                     Multi-tenant business resolution
 │   ├── supabase.js                   Database operations (paginated, encrypted PII)
 │   ├── supabase-admin.js             Singleton Supabase client
 │   ├── photo-upload.js               Vehicle photo processing
-│   ├── refund.js                     Dual-provider refund logic (LemonSqueezy + Stripe)
+│   ├── refund.js                     Dual-provider refund (LemonSqueezy + Stripe, idempotent)
 │   ├── pii-redact.js                 PII scrubbing for logs
 │   ├── pii-encrypt.js                AES-256-GCM encryption for PII at rest
+│   ├── api-validation.js             Zod v4 request/response validation
 │   ├── business-config.js            Multi-tenant landing page config loader
 │   ├── env-helpers.js                envBool() / envInt() type coercion
 │   ├── csrf.js                       CSRF token generation
@@ -267,53 +287,56 @@ Or connect your GitHub repo to Vercel for auto-deploys on every push.
 │   ├── Navbar.js                     Scroll-aware navigation
 │   └── dashboard/                    Dashboard components
 │
-├── tests/                            243 unit/integration tests
-│   ├── maestro.test.js               Orchestration engine (24 tests)
-│   ├── tools.test.js                 Tool execution (30 tests)
-│   ├── tenant.test.js                Multi-tenant isolation (9 tests)
-│   ├── rate-limit.test.js            Rate limiting (17 tests)
-│   ├── i18n.test.js                  Bilingual support (15 tests)
-│   ├── output-validator.test.js      LLM output validation (12 tests)
-│   ├── csrf.test.js                  CSRF protection (13 tests)
-│   ├── circuit-breaker.test.js       Circuit breaker (9 tests)
-│   ├── meta-webhook.test.js          Meta webhook verification (16 tests)
-│   ├── photo-upload.test.js          Photo upload + analysis (15 tests)
-│   ├── twilio.test.js                SMS retry logic (11 tests)
-│   ├── refund.test.js                Refund processing (10 tests)
-│   ├── session.test.js               JWT session management (7 tests)
-│   ├── booking-concurrency.test.js   Booking race conditions (2 tests)
-│   ├── runtime-resilience.test.js    Edge cases (4 tests)
-│   ├── webhook-revenue.test.js       Webhook revenue integrity (4 tests)
-│   ├── env-validation.test.js        Environment validation (5 tests)
-│   └── integration-real.test.js      Live Supabase (gated by INTEGRATION_TESTS=true)
+├── tests/                            243 unit/integration tests (22 files)
+│   ├── maestro.test.js               Orchestration engine
+│   ├── tools.test.js                 Tool execution
+│   ├── tenant.test.js                Multi-tenant isolation
+│   ├── rate-limit.test.js            Rate limiting
+│   ├── i18n.test.js                  Bilingual support
+│   ├── output-validator.test.js      LLM output validation
+│   ├── csrf.test.js                  CSRF protection
+│   ├── circuit-breaker.test.js       Circuit breaker (Redis-persisted)
+│   ├── meta-webhook.test.js          Meta webhook verification
+│   ├── photo-upload.test.js          Photo upload + analysis
+│   ├── twilio.test.js                SMS retry logic
+│   ├── refund.test.js                Refund processing (idempotent)
+│   ├── session.test.js               JWT session management
+│   ├── integrations.test.js          Jobber, GBP webhooks
+│   ├── booking-concurrency.test.js   Booking race conditions
+│   ├── runtime-resilience.test.js    Edge cases
+│   ├── webhook-revenue.test.js       Webhook revenue integrity
+│   └── env-validation.test.js        Environment validation
 │
-├── e2e/                              30 Playwright E2E tests (API-level)
-│   ├── chat.spec.js                  Chat API contract tests
-│   ├── auth.spec.js                  Dashboard authentication
-│   ├── bookings.spec.js              Booking CRUD operations
+├── e2e/                              28 Playwright E2E tests (API-level)
+│   ├── env.js                        Shared test credential helper
 │   ├── health.spec.js                Health check + verbose endpoint
-│   └── security.spec.js              Rate limiting, CSRF, headers
+│   ├── auth.spec.js                  Dashboard authentication
+│   ├── chat.spec.js                  Chat API contract tests
+│   ├── bookings.spec.js              Booking CRUD operations
+│   └── security.spec.js              Rate limiting, CSRF, headers, v1 routing
 │
 ├── supabase/                         Database schemas + migrations
 │   ├── schema.sql                    Base schema
 │   ├── multi-tenancy-migration.sql   Business isolation
 │   ├── vehicle-photos-migration.sql  Photo storage
 │   ├── 0004_whatsapp_integration.sql
-│   └── 0005_loyalty_program.sql
+│   ├── 0005_loyalty_program.sql
+│   └── 0006_payment_provider_column.sql
 │
 ├── scripts/                          Utility scripts
 │   └── migrate.js                    Database migration runner
 │
 ├── playwright.config.js              E2E test configuration
 ├── vitest.config.js                  Unit test configuration
-├── middleware.js                      Next.js middleware (CSRF, security headers)
+├── middleware.js                      Next.js middleware (CSRF, security headers, request ID)
 ├── sentry.client.config.js           Sentry client setup
 ├── sentry.server.config.js           Sentry server setup
 ├── DEPLOY.md                         Production deployment checklist
-├── STAGING.md                        Staging environment setup
 ├── ARCHITECTURE.md                   Architecture decision records
-├── AUDIT.md                          Security audit log
+├── AUDIT.md                          FAANG-level security audit (6.6/10 → production hardened)
+├── KNOWN_ISSUES.md                   Known limitations and production readiness
 ├── SECURITY_CHANGELOG.md             Vulnerability fix history
+├── STAGING.md                        Staging environment setup
 └── CHANGELOG.md                      Release notes
 ```
 
@@ -323,55 +346,56 @@ Or connect your GitHub repo to Vercel for auto-deploys on every push.
 
 ### Chat
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/api/chat` | Maya chat — main entry point |
-| `POST` | `/api/v1/chat` | Maya chat — versioned route |
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| `POST` | `/api/chat` | Rate limit | Maya chat — main entry point |
+| `POST` | `/api/v1/chat` | Rate limit | Maya chat — versioned route |
 
 ### Bookings
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/api/bookings` | Create booking |
-| `GET` | `/api/bookings` | List bookings (authenticated) |
-| `POST` | `/api/v1/bookings` | Create booking — versioned |
-| `GET` | `/api/v1/bookings` | List bookings — versioned |
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| `GET` | `/api/bookings` | Session | List bookings |
+| `POST` | `/api/bookings` | Rate limit | Create booking |
+| `GET` | `/api/v1/bookings` | Session | List bookings — versioned |
+| `POST` | `/api/v1/bookings` | Rate limit | Create booking — versioned |
 
 ### Payments
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/api/stripe/webhook` | Stripe payment events |
-| `POST` | `/api/lemon-squeezy/webhook` | LemonSqueezy payment events |
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| `POST` | `/api/stripe/webhook` | HMAC signature | Stripe payment events |
+| `POST` | `/api/lemonsqueezy/webhook` | HMAC signature | LemonSqueezy payment events |
 
 ### Dashboard
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/api/dashboard/auth` | Dashboard login |
-| `GET` | `/api/dashboard/analytics` | Analytics with week-over-week trends |
-| `GET` | `/api/dashboard/analytics/export` | CSV export |
-| `POST` | `/api/dashboard/refund` | Process refund (dual-provider) |
-| `PUT` | `/api/dashboard/settings` | Update business settings |
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| `POST` | `/api/dashboard/auth` | Rate limit | Dashboard login |
+| `GET` | `/api/dashboard/analytics` | Session | Analytics with date range filtering |
+| `GET` | `/api/dashboard/analytics/export` | Session | CSV export |
+| `GET` | `/api/dashboard/settings` | Session | Business settings |
+| `PUT` | `/api/dashboard/settings` | Session | Update business settings |
+| `POST` | `/api/dashboard/refund` | Session | Process refund (dual-provider, idempotent) |
 
 ### Webhooks
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/api/webhook/meta` | Meta Messenger webhook |
-| `GET` | `/api/webhook/meta` | Meta verification |
-| `POST` | `/api/webhook/google` | Google Business webhook |
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| `POST` | `/api/webhook/meta` | HMAC signature | Meta Messenger webhook |
+| `GET` | `/api/webhook/meta` | Verify token | Meta verification |
+| `POST` | `/api/webhook/google` | HMAC signature | Google Business webhook |
 
 ### Operations
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/health` | System health check |
-| `POST` | `/api/health` | Verbose health (CRON_SECRET required) |
-| `GET` | `/api/v1/health` | Health check — versioned |
-| `POST` | `/api/cron/daily-summary` | Daily owner summary |
-| `POST` | `/api/admin/rate-limit/reset` | Reset rate limits (ADMIN_API_SECRET required) |
-| `POST` | `/api/upload` | Vehicle photo upload |
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| `GET` | `/api/health` | None | System health check (public) |
+| `POST` | `/api/health` | Bearer token | Verbose health (admin only) |
+| `GET` | `/api/v1/health` | Session | Health check — versioned |
+| `POST` | `/api/cron/daily-summary` | Bearer token | Daily owner summary |
+| `POST` | `/api/admin/rate-limit/reset` | Bearer token | Reset rate limits (admin only) |
+| `POST` | `/api/upload` | Rate limit | Vehicle photo upload |
 
 ---
 
@@ -416,12 +440,21 @@ npm run test:e2e            # Run E2E against local server
 npm run test:e2e:ui         # Interactive UI mode
 ```
 
-**30 API-level E2E tests** covering:
-- Chat API — request validation, session management, streaming
-- Auth — login, session cookies, protected routes
-- Bookings — CRUD, validation, availability
-- Health — status, verbose endpoint, no sensitive data leaks
-- Security — rate limiting, CSRF, headers, request ID propagation
+**28 API-level E2E tests** covering:
+- **Health** (6) — GET/POST, no-cache headers, no sensitive data leaks, admin auth
+- **Auth** (8) — login, wrong password, empty password, session cookie, protected routes
+- **Chat** (6) — request validation, session management, SSE streaming, no-AI-key fallback
+- **Bookings** (5) — 401 without session, authenticated flow, availability
+- **Security** (5) — headers, CSRF, rate limiting, v1 routing
+
+### CI Pipeline
+
+```yaml
+# .github/workflows/ci.yml
+Job 1: test (lint + unit tests)
+Job 2: build-and-e2e (next build + playwright + artifact upload)
+# Job 2 runs only after Job 1 passes
+```
 
 ---
 
@@ -470,7 +503,12 @@ LLM Call (Gemini → DeepSeek → OpenAI via circuit breaker)
     ├──► Tool calls → Execute tools → Feed results back → LLM call (loop, max 5 iterations)
     │
     ▼
-Final Response
+Output Validation (Zod schema)
+    │
+    ├──► Validation failed → Safe fallback response
+    │
+    ▼
+PII Redaction (strip customer data from response)
     │
     ▼
 Persist Session (Supabase)
@@ -501,8 +539,9 @@ Send to Customer
 |----------|-------|--------|
 | Chat API | 20 requests/session | 1 minute |
 | Chat API | 30 requests/IP | 1 minute |
+| Bookings | 5 requests/IP | 1 minute |
 | Dashboard Login | 5 attempts/IP | 15 minutes |
-| Webhook | 30 requests/IP | 1 minute |
+| Webhooks | 30 requests/IP | 1 minute |
 
 ### Compliance
 
@@ -549,6 +588,7 @@ See [STAGING.md](STAGING.md) for:
 | `DASHBOARD_PASSWORD` | Dashboard login password |
 | `DASHBOARD_SESSION_SECRET` | JWT signing secret (min 32 chars) |
 | `ADMIN_API_SECRET` | Admin endpoint auth (min 32 chars) |
+| `CRON_SECRET` | Health check + cron auth |
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase publishable key |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase secret key (server-only) |
@@ -568,9 +608,10 @@ See [STAGING.md](STAGING.md) for:
 | `TWILIO_*` | SMS delivery |
 | `RESEND_API_KEY` | Email delivery |
 | `GOOGLE_CALENDAR_*` | Calendar sync |
-| `META_*` | Messenger/Instagram |
+| `META_*` | Messenger/Instagram/WhatsApp |
 | `ENCRYPTION_KEY` | PII encryption at rest |
 | `UPSTASH_REDIS_*` | Distributed rate limiting |
+| `SENTRY_DSN` | Error tracking |
 
 See [`.env.example`](.env.example) for the complete list with documentation.
 
@@ -578,14 +619,14 @@ See [`.env.example`](.env.example) for the complete list with documentation.
 
 ## Roadmap
 
-### Phase 1 — Core Booking Agent
+### Phase 1 — Core Booking Agent ✅
 - [x] AI chat with tool calling
 - [x] Google Calendar sync
 - [x] Stripe deposit collection
 - [x] Twilio SMS alerts
 - [x] Owner dashboard with analytics
 
-### Phase 2 — Production Hardening
+### Phase 2 — Production Hardening ✅
 - [x] Multi-tenant data model
 - [x] Bilingual support (EN/ES)
 - [x] Rate limiting + security
@@ -596,14 +637,19 @@ See [`.env.example`](.env.example) for the complete list with documentation.
 - [x] LemonSqueezy payment migration
 - [x] PII encryption at rest
 
-### Phase 3 — Scale
-- [x] Circuit breaker for AI failover
-- [x] Structured JSON logging
+### Phase 3 — Enterprise Scale ✅
+- [x] Circuit breaker for AI failover (Redis-persisted)
+- [x] Structured JSON logging (all 37 source files)
 - [x] API versioning (/api/v1/*)
 - [x] Environment validation (production fail-closed)
-- [x] 243 unit tests + 30 E2E tests
-- [x] In-memory rate limit fallback
-- [x] Paginated database queries
+- [x] 243 unit tests + 28 E2E tests
+- [x] Redis-first session revocation (O(1) lookups)
+- [x] Token budget per request (50K limit)
+- [x] Refund idempotency (optimistic locking)
+- [x] FAANG-level audit + 5 critical fixes
+- [x] GitHub Actions CI (lint → test → build → E2E)
+- [x] PII redaction on LLM responses
+- [x] CSV analytics export
 
 ### Phase 4 — Growth
 - [ ] Multi-language expansion (French, Vietnamese)
@@ -619,9 +665,10 @@ See [`.env.example`](.env.example) for the complete list with documentation.
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
 3. Run tests (`npm test`) and lint (`npm run lint`)
-4. Commit your changes (`git commit -m 'feat: add amazing feature'`)
-5. Push to the branch (`git push origin feature/amazing-feature`)
-6. Open a Pull Request
+4. Run E2E tests (`npm run test:e2e`)
+5. Commit your changes (`git commit -m 'feat: add amazing feature'`)
+6. Push to the branch (`git push origin feature/amazing-feature`)
+7. Open a Pull Request
 
 ---
 
@@ -643,7 +690,7 @@ This project was built to solve a real problem: mobile detailers losing thousand
 
 ### Ready to Stop Losing Customers?
 
-**[Deploy to Vercel](https://vercel.com/new/clone?repository-url=https://github.com/Mr-Cleaner-AI-Employee/Mr-Cleaner-AI-Employee)** · **[View Live Demo](https://mr-cleaner.vercel.app)** · **[Report Bug](https://github.com/Mr-Cleaner-AI-Employee/Mr-Cleaner-AI-Employee/issues)**
+**[Deploy to Vercel](https://vercel.com/new/clone?repository-url=https://github.com/Ismail-2001/Mr-Cleaner-AI-Employee)** · **[View Live Demo](https://mr-cleaner.vercel.app)** · **[Report Bug](https://github.com/Ismail-2001/Mr-Cleaner-AI-Employee/issues)**
 
 ---
 
