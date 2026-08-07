@@ -28,14 +28,49 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Production build
-        run: npm run build
-        env:
-          DASHBOARD_SESSION_SECRET: ${{ secrets.DASHBOARD_SESSION_SECRET || 'ci-test-secret-for-testing-only-32ch' }}
-          NODE_ENV: production
-
       - name: Unit tests
         run: npm test
         env:
           DASHBOARD_SESSION_SECRET: ${{ secrets.DASHBOARD_SESSION_SECRET || 'ci-test-secret-for-testing-only-32ch' }}
           NODE_ENV: test
+
+  build-and-e2e:
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Production build
+        run: npm run build
+        env:
+          DASHBOARD_SESSION_SECRET: ${{ secrets.DASHBOARD_SESSION_SECRET || 'ci-test-secret-for-testing-only-32ch' }}
+          DASHBOARD_PASSWORD: e2e-test-password-12345
+          NODE_ENV: production
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: E2E tests
+        run: npx playwright test
+        env:
+          CI: true
+          DASHBOARD_PASSWORD: e2e-test-password-12345
+          DASHBOARD_SESSION_SECRET: e2e-test-secret-for-playwright-tests-32ch!
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14
