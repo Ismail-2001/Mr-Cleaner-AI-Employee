@@ -272,8 +272,9 @@ describe('get_availability', () => {
     it('passes duration through to checkAvailability', async () => {
         const { checkAvailability } = await import('@/lib/calendar');
         checkAvailability.mockResolvedValue([]);
-        const result = await executeTool('get_availability', { date: '2026-08-15', duration: 240 });
-        expect(checkAvailability).toHaveBeenCalledWith('2026-08-15', 240);
+        const futureDate = new Date(Date.now() + 30 * 86400_000).toISOString().slice(0, 10);
+        await executeTool('get_availability', { date: futureDate, duration: 240 });
+        expect(checkAvailability).toHaveBeenCalledWith(futureDate, 240);
     });
 });
 
